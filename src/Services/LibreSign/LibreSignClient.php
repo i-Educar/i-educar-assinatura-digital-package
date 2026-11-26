@@ -148,13 +148,48 @@ final class LibreSignClient
      */
     public function downloadFromUrl(string $url): string
     {
-        $absolute = str_starts_with($url, 'http') ? $url : $this->base().'/'.ltrim($url, '/');
+        $absolute = $this->resolverUrlInterna($url);
         $response = $this->http()->get($absolute);
         if (! $response->successful()) {
             throw new RuntimeException('Falha ao baixar PDF do LibreSign (HTTP '.$response->status().').');
         }
 
         return $response->body();
+    }
+
+    /**
+     * Converte URL relativa/absoluta do Nextcloud para o host interno (ex.: host.docker.internal).
+     * LibreSign costuma devolver localhost:8088 (OVERWRITEHOST) — inacessível de dentro do FPM.
+     */
+    public function resolverUrlInterna(string $url): string
+    {
+        $base = $this->base();
+        if ($url === '') {
+            return $base;
+        }
+        if (! str_starts_with($url, 'http')) {
+            return $base.'/'.ltrim($url, '/');
+        }
+
+        $parts = parse_url($url);
+        $baseParts = parse_url($base);
+        if (! is_array($parts) || ! is_array($baseParts)) {
+            return $url;
+        }
+
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $publicHosts = ['localhost', '127.0.0.1', 'nextcloud', 'ieducar-libresign-nc'];
+        if (in_array($host, $publicHosts, true) || $host === strtolower((string) ($baseParts['host'] ?? ''))) {
+            $scheme = (string) ($baseParts['scheme'] ?? 'http');
+            $newHost = (string) ($baseParts['host'] ?? $host);
+            $port = isset($baseParts['port']) ? ':'.$baseParts['port'] : '';
+            $path = (string) ($parts['path'] ?? '/');
+            $query = isset($parts['query']) ? '?'.$parts['query'] : '';
+
+            return $scheme.'://'.$newHost.$port.$path.$query;
+        }
+
+        return $url;
     }
 
     public function ping(): bool
