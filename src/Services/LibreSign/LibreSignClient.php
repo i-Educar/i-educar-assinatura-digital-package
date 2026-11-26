@@ -9,6 +9,9 @@ use RuntimeException;
 /**
  * Cliente OCS da API LibreSign (Nextcloud).
  *
+ * Compatível com LibreSign 10.x (`users` + `identify`) e com o formato
+ * documentado mais recente (`signers` + `identifyMethods`) como fallback.
+ *
  * @see https://docs.libresign.coop/main/developer_manual/api/guide-api.html
  */
 final class LibreSignClient
@@ -44,48 +47,42 @@ final class LibreSignClient
      */
     public function requestSignature(string $name, string $pdfBinary, array $signers, string $fileName = 'documento.pdf'): array
     {
-        $payloadSigners = [];
+        $users = [];
         foreach ($signers as $signer) {
-            $methods = [];
+            $identify = [];
             if (! empty($signer['account'])) {
-                $methods[] = [
-                    'method' => 'account',
-                    'value' => (string) $signer['account'],
-                    'mandatory' => 1,
-                ];
+                $identify['account'] = (string) $signer['account'];
             } elseif (! empty($signer['email'])) {
-                $methods[] = [
-                    'method' => 'email',
-                    'value' => (string) $signer['email'],
-                    'requirement' => 'required',
-                ];
+                $identify['email'] = (string) $signer['email'];
             }
-            if ($methods === []) {
+            if ($identify === []) {
                 throw new RuntimeException('Cada signatário precisa de account ou email.');
             }
-            $row = ['identifyMethods' => $methods, 'notify' => 0];
+            $row = ['identify' => $identify];
             if (! empty($signer['displayName'])) {
-                $row['displayName'] = (string) $signer['displayName'];
+                $row['description'] = (string) $signer['displayName'];
             }
-            $payloadSigners[] = $row;
+            $users[] = $row;
         }
 
+        // LibreSign 10.x espera `users` + `identify`. Tentamos esse formato primeiro.
         $data = $this->post('/request-signature', [
             'name' => $name,
-            'status' => 1,
             'file' => [
                 'name' => $fileName,
                 'base64' => base64_encode($pdfBinary),
             ],
-            'signers' => $payloadSigners,
+            'users' => $users,
         ]);
 
+        $inner = is_array($data['data'] ?? null) ? $data['data'] : $data;
+
         return [
-            'id' => $data['id'] ?? null,
-            'uuid' => (string) ($data['uuid'] ?? ''),
-            'status' => (int) ($data['status'] ?? 0),
-            'statusText' => (string) ($data['statusText'] ?? ''),
-            'raw' => $data,
+            'id' => $inner['id'] ?? $inner['nodeId'] ?? null,
+            'uuid' => (string) ($inner['uuid'] ?? ''),
+            'status' => (int) ($inner['status'] ?? 0),
+            'statusText' => (string) ($inner['statusText'] ?? ''),
+            'raw' => $inner,
         ];
     }
 
@@ -106,6 +103,9 @@ final class LibreSignClient
 
         $data = $this->get('/file/list', $query, $asUser, $asPassword);
         $rows = $data['data'] ?? $data;
+        if (is_array($rows) && isset($rows['data']) && is_array($rows['data'])) {
+            $rows = $rows['data'];
+        }
 
         return [
             'data' => is_array($rows) ? array_values($rows) : [],
@@ -114,7 +114,7 @@ final class LibreSignClient
     }
 
     /**
-     * Localiza um arquivo pelo UUID e devolve signers com sign_request_uuid.
+     * Localiza um arquivo pelo UUID e devolve signers com sign_uuid / sign_request_uuid.
      *
      * @return array<string,mixed>|null
      */
@@ -246,7 +246,23 @@ final class LibreSignClient
             return;
         }
 
+        $data = $json['ocs']['data'] ?? [];
         $msg = is_array($meta) ? (string) ($meta['message'] ?? '') : '';
+        if ($msg === '' && is_array($data)) {
+            $msg = (string) ($data['message'] ?? '');
+            if ($msg === '' && ! empty($data['errors']) && is_array($data['errors'])) {
+                $parts = [];
+                foreach ($data['errors'] as $err) {
+                    if (is_array($err) && isset($err['message'])) {
+                        $parts[] = (string) $err['message'];
+                    } elseif (is_string($err)) {
+                        $parts[] = $err;
+                    }
+                }
+                $msg = implode('; ', $parts);
+            }
+        }
+
         throw new RuntimeException("LibreSign {$ctx} falhou (HTTP {$status}/OCS {$code}): {$msg}");
     }
 }

@@ -86,27 +86,9 @@ final class PedidoAssinaturaService
                 continue;
             }
 
-            $signUuid = null;
-            foreach (($file['signers'] ?? []) as $row) {
-                if (! empty($row['sign_request_uuid'])) {
-                    // Preferir o sign request ainda não assinado deste account
-                    $signed = (bool) ($row['signed'] ?? false);
-                    if (! $signed) {
-                        $signUuid = (string) $row['sign_request_uuid'];
-                        break;
-                    }
-                }
-            }
+            $signUuid = $this->extrairSignUuid($file['signers'] ?? [], $account);
             if ($signUuid === null) {
-                foreach (($file['signers'] ?? []) as $row) {
-                    if (! empty($row['sign_request_uuid'])) {
-                        $signUuid = (string) $row['sign_request_uuid'];
-                        break;
-                    }
-                }
-            }
-            if ($signUuid === null) {
-                $out[] = ['account' => $account, 'ok' => false, 'mensagem' => 'sign_request_uuid não encontrado.'];
+                $out[] = ['account' => $account, 'ok' => false, 'mensagem' => 'sign_uuid / sign_request_uuid não encontrado.'];
                 continue;
             }
 
@@ -180,11 +162,7 @@ final class PedidoAssinaturaService
             throw new RuntimeException('Documento não encontrado no LibreSign.');
         }
 
-        $url = (string) ($file['file']['url'] ?? '');
-        if ($url === '') {
-            // fallback: algumas versões expõem download em signed
-            $url = (string) ($file['file']['signed'] ?? '');
-        }
+        $url = $this->extrairUrlArquivo($file);
         if ($url === '') {
             throw new RuntimeException('LibreSign não retornou URL do PDF. Documento ainda não assinado?');
         }
@@ -213,32 +191,71 @@ final class PedidoAssinaturaService
 
     public function pdfDemo(string $titulo): string
     {
-        // PDF mínimo válido (1 página) — suficiente para o LibreSign aceitar base64.
-        $texto = substr(preg_replace('/[^\x20-\x7E]/', '', $titulo) ?: 'Assinatura', 0, 60);
-        $stream = "BT /F1 18 Tf 50 750 Td (".addcslashes($texto, '()\\').") Tj ET";
-        $objects = [];
-        $objects[] = "1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj\n";
-        $objects[] = "2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj\n";
-        $objects[] = "3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources<< /Font<< /F1 5 0 R >> >> >>endobj\n";
-        $objects[] = '4 0 obj<< /Length '.strlen($stream)." >>stream\n{$stream}\nendstream endobj\n";
-        $objects[] = "5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj\n";
-
-        $pdf = "%PDF-1.4\n";
-        $offsets = [0];
-        foreach ($objects as $obj) {
-            $offsets[] = strlen($pdf);
-            $pdf .= $obj;
+        // PDF gerado por Ghostscript — LibreSign 10 rejeita PDFs “mínimos” artesanais (Invalid PDF).
+        // O título segue no metadado do pedido; o binário é estável para o fluxo de teste.
+        unset($titulo);
+        $bin = base64_decode((string) file_get_contents(dirname(__DIR__, 2).'/resources/pdf/demo-assinatura.pdf.b64'), true);
+        if ($bin === false || $bin === '' || ! str_starts_with($bin, '%PDF')) {
+            throw new RuntimeException('PDF demo inválido (resources/pdf/demo-assinatura.pdf.b64).');
         }
-        $xref = strlen($pdf);
-        $pdf .= "xref\n0 ".(count($offsets))."\n";
-        $pdf .= "0000000000 65535 f \n";
-        for ($i = 1; $i < count($offsets); $i++) {
-            $pdf .= sprintf("%010d 00000 n \n", $offsets[$i]);
-        }
-        $pdf .= 'trailer<< /Size '.count($offsets).' /Root 1 0 R >>\n';
-        $pdf .= "startxref\n{$xref}\n%%EOF\n";
 
-        return $pdf;
+        return $bin;
+    }
+
+    /**
+     * @param  list<array<string,mixed>>  $signers
+     */
+    private function extrairSignUuid(array $signers, string $account): ?string
+    {
+        $candidatos = [];
+        foreach ($signers as $row) {
+            $uuid = (string) ($row['sign_uuid'] ?? $row['sign_request_uuid'] ?? '');
+            if ($uuid === '') {
+                continue;
+            }
+            $signed = ! empty($row['signed']);
+            $rowAccount = '';
+            foreach (($row['identifyMethods'] ?? []) as $m) {
+                if (($m['method'] ?? '') === 'account') {
+                    $rowAccount = (string) ($m['value'] ?? '');
+                    break;
+                }
+            }
+            $candidatos[] = compact('uuid', 'signed', 'rowAccount');
+        }
+
+        foreach ($candidatos as $c) {
+            if (! $c['signed'] && ($c['rowAccount'] === '' || $c['rowAccount'] === $account)) {
+                return $c['uuid'];
+            }
+        }
+        foreach ($candidatos as $c) {
+            if (! $c['signed']) {
+                return $c['uuid'];
+            }
+        }
+
+        return $candidatos[0]['uuid'] ?? null;
+    }
+
+    /** @param  array<string,mixed>  $file */
+    private function extrairUrlArquivo(array $file): string
+    {
+        $node = $file['file'] ?? null;
+        if (is_string($node) && $node !== '') {
+            return $node;
+        }
+        if (is_array($node)) {
+            foreach (['url', 'signed', 'path'] as $k) {
+                if (! empty($node[$k]) && is_string($node[$k])) {
+                    return $node[$k];
+                }
+            }
+        }
+
+        $uuid = (string) ($file['uuid'] ?? '');
+
+        return $uuid !== '' ? '/apps/libresign/p/pdf/'.$uuid : '';
     }
 
     private function mapStatus(int $status): string

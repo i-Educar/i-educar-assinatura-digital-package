@@ -52,12 +52,12 @@ final class AssinaturaUnicaEMultiplaTest extends TestCase
             'libresign.test/ocs/v2.php/apps/libresign/api/v1/file/list*' => Http::sequence()
                 ->push(['ocs' => ['meta' => ['statuscode' => 200], 'data' => ['data' => [[
                     'id' => 10, 'uuid' => $uuid, 'status' => 1,
-                    'signers' => [['sign_request_uuid' => $signUuid, 'signed' => false]],
+                    'signers' => [['sign_uuid' => $signUuid, 'sign_request_uuid' => $signUuid, 'signed' => false]],
                     'file' => ['url' => $pdfUrl],
                 ]]]]], 200)
                 ->push(['ocs' => ['meta' => ['statuscode' => 200], 'data' => ['data' => [[
                     'id' => 10, 'uuid' => $uuid, 'status' => 3, 'statusText' => 'signed',
-                    'signers' => [['sign_request_uuid' => $signUuid, 'signed' => true]],
+                    'signers' => [['sign_uuid' => $signUuid, 'sign_request_uuid' => $signUuid, 'signed' => true]],
                     'file' => ['url' => $pdfUrl],
                 ]]]]], 200),
             'libresign.test/ocs/v2.php/apps/libresign/api/v1/sign/uuid/'.$signUuid => Http::response([
