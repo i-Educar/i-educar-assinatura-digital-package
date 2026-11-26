@@ -1,54 +1,54 @@
 {
-    "name": "buriti/i-educar-assinatura-digital-package",
-    "description": "Assinatura digital de documentos e protocolos no i-Educar via LibreSign (SME, externos e API Android assinar-web).",
-    "version": "0.1.0",
-    "type": "library",
-    "license": "GPL-2.0-or-later",
-    "keywords": [
-        "ieducar",
-        "buriti",
-        "laguna",
-        "libresign",
-        "assinatura",
+  "name": "buriti/i-educar-assinatura-digital-package",
+  "description": "Assinatura digital de documentos e protocolos no i-Educar via LibreSign (SME, externos e API Android assinar-web).",
+  "version": "0.1.1",
+  "type": "library",
+  "license": "GPL-2.0-or-later",
+  "keywords": [
+    "ieducar",
+    "buriti",
+    "laguna",
+    "libresign",
+    "assinatura",
+    "2.12"
+  ],
+  "authors": [
+    {
+      "name": "Buriti"
+    }
+  ],
+  "require": {
+    "php": ">=8.3",
+    "illuminate/support": "^11.0|^12.0|^13.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "iEducar\\Packages\\BuritiAssinaturaDigital\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "iEducar\\Packages\\BuritiAssinaturaDigital\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "iEducar\\Packages\\BuritiAssinaturaDigital\\Providers\\AssinaturaDigitalServiceProvider"
+      ]
+    },
+    "ieducar": {
+      "compatible": [
         "2.12"
-    ],
-    "authors": [
-        {
-            "name": "Buriti"
-        }
-    ],
-    "require": {
-        "php": ">=8.3",
-        "illuminate/support": "^11.0|^12.0|^13.0"
+      ],
+      "min": "2.12.0",
+      "notes": "PDF assinado permanece no LibreSign; i-Educar faz proxy ver/baixar e registra validação pública."
     },
-    "autoload": {
-        "psr-4": {
-            "iEducar\\Packages\\BuritiAssinaturaDigital\\": "src/"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "iEducar\\Packages\\BuritiAssinaturaDigital\\Tests\\": "tests/"
-        }
-    },
-    "extra": {
-        "laravel": {
-            "providers": [
-                "iEducar\\Packages\\BuritiAssinaturaDigital\\Providers\\AssinaturaDigitalServiceProvider"
-            ]
-        },
-        "ieducar": {
-            "compatible": [
-                "2.12"
-            ],
-            "min": "2.12.0",
-            "notes": "PDF assinado permanece no LibreSign; i-Educar faz proxy ver/baixar e registra validação pública."
-        },
-        "idiario": {
-            "compatible": true,
-            "via": "Documentos/certificados podem ser assinados; diário consome PDF via núcleo.",
-            "notes": "Não substitui i-Diário; assina artefatos gerados pela rede."
-        }
-    },
-    "minimum-stability": "stable"
+    "idiario": {
+      "compatible": true,
+      "via": "Documentos/certificados podem ser assinados; diário consome PDF via núcleo.",
+      "notes": "Não substitui i-Diário; assina artefatos gerados pela rede."
+    }
+  },
+  "minimum-stability": "stable"
 }
