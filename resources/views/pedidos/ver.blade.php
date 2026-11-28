@@ -36,9 +36,9 @@
     @endif
 @endsection
 @section('acoes-topo')
-    <a class="botao claro" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id']) }}"><i class="fa fa-info-circle"></i> Detalhe</a>
-    <a class="botao claro" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/pdf') }}" target="_blank"><i class="fa fa-external-link"></i> Só PDF</a>
-    <a class="botao" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/baixar') }}"><i class="fa fa-download"></i> Baixar</a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id']) }}" title="Detalhe" aria-label="Detalhe"><i aria-hidden="true" class="fa fa-info-circle"></i></a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/pdf') }}" target="_blank" title="Só PDF" aria-label="Só PDF"><i aria-hidden="true" class="fa fa-external-link"></i></a>
+    <a class="botao icone" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/baixar') }}" title="Baixar" aria-label="Baixar"><i aria-hidden="true" class="fa fa-download"></i></a>
 @endsection
 
 @push('estilos')

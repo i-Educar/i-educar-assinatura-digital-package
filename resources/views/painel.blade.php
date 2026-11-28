@@ -7,12 +7,12 @@
     PDFs assinados no LibreSign. Aqui você consulta pedidos, baixa por proxy e valida autenticidade.
 @endsection
 @section('acoes-topo')
-    <a class="botao claro" href="{{ url('/assinatura-digital/pedidos') }}"><i class="fa fa-list"></i> Pedidos</a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital/pedidos') }}" title="Pedidos" aria-label="Pedidos"><i aria-hidden="true" class="fa fa-list"></i></a>
     @if(!empty($isAssinaturaAdmin))
-        <a class="botao" href="{{ url('/assinatura-digital/testes') }}"><i class="fa fa-flask"></i> Testes</a>
-        <a class="botao claro" href="{{ url('/assinatura-digital/configuracoes') }}"><i class="fa fa-sliders"></i> Configurações</a>
+        <a class="botao icone" href="{{ url('/assinatura-digital/testes') }}" title="Testes" aria-label="Testes"><i aria-hidden="true" class="fa fa-flask"></i></a>
+        <a class="botao claro icone" href="{{ url('/assinatura-digital/configuracoes') }}" title="Configurações" aria-label="Configurações"><i aria-hidden="true" class="fa fa-sliders"></i></a>
     @endif
-    <a class="botao claro" href="{{ url('/assinatura-digital/verificar') }}" target="_blank"><i class="fa fa-qrcode"></i> Validação pública</a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital/verificar') }}" target="_blank" title="Validação pública" aria-label="Validação pública"><i aria-hidden="true" class="fa fa-qrcode"></i></a>
 @endsection
 
 @section('conteudo')

@@ -7,8 +7,8 @@
     Dois cenários contra o LibreSign local (docker/libresign).
 @endsection
 @section('acoes-topo')
-    <a class="botao claro" href="{{ url('/assinatura-digital') }}"><i class="fa fa-th-large"></i> Painel</a>
-    <a class="botao claro" href="{{ url('/assinatura-digital/configuracoes') }}"><i class="fa fa-sliders"></i> Configurações</a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital') }}" title="Painel" aria-label="Painel"><i aria-hidden="true" class="fa fa-th-large"></i></a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital/configuracoes') }}" title="Configurações" aria-label="Configurações"><i aria-hidden="true" class="fa fa-sliders"></i></a>
 @endsection
 
 @section('conteudo')

@@ -27,14 +27,14 @@
     · cenário {{ $pedido['cenario'] ?? '—' }}
 @endsection
 @section('acoes-topo')
-    <a class="botao claro" href="{{ url('/assinatura-digital/pedidos') }}"><i class="fa fa-arrow-left"></i> Pedidos</a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital/pedidos') }}" title="Pedidos" aria-label="Pedidos"><i aria-hidden="true" class="fa fa-arrow-left"></i></a>
     @if(!empty($pedido['libresign_uuid']))
-        <a class="botao" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/ver') }}" target="_blank"><i class="fa fa-eye"></i> Ver PDF</a>
-        <a class="botao claro" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/baixar') }}"><i class="fa fa-download"></i> Baixar</a>
+        <a class="botao icone" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/ver') }}" target="_blank" title="Ver PDF" aria-label="Ver PDF"><i aria-hidden="true" class="fa fa-eye"></i></a>
+        <a class="botao claro icone" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/baixar') }}" title="Baixar" aria-label="Baixar"><i aria-hidden="true" class="fa fa-download"></i></a>
     @endif
     <form method="post" action="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/sincronizar') }}" style="display:inline">
         @csrf
-        <button class="botao claro" type="submit"><i class="fa fa-refresh"></i> Sincronizar</button>
+        <button class="botao claro icone" type="submit" title="Sincronizar" aria-label="Sincronizar"><i aria-hidden="true" class="fa fa-refresh"></i></button>
     </form>
 @endsection
 

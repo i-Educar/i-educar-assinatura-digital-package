@@ -7,9 +7,9 @@
     Documentos aguardando a sua assinatura digital no LibreSign. Confirme para registrar.
 @endsection
 @section('acoes-topo')
-    <a class="botao claro" href="{{ url('/painel') }}"><i class="fa fa-th-large"></i> Painel</a>
-    <a class="botao claro" href="{{ url('/assinatura-digital/assinados') }}"><i class="fa fa-check-square-o"></i> Já assinei</a>
-    <a class="botao claro" href="{{ url('/assinatura-digital/pedidos') }}"><i class="fa fa-list"></i> Todos os pedidos</a>
+    <a class="botao claro icone" href="{{ url('/painel') }}" title="Painel" aria-label="Painel"><i aria-hidden="true" class="fa fa-th-large"></i></a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital/assinados') }}" title="Já assinei" aria-label="Já assinei"><i aria-hidden="true" class="fa fa-check-square-o"></i></a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital/pedidos') }}" title="Todos os pedidos" aria-label="Todos os pedidos"><i aria-hidden="true" class="fa fa-list"></i></a>
 @endsection
 
 @section('conteudo')

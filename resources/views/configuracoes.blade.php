@@ -7,17 +7,17 @@
     Instância LibreSign, signatários e regras — edição no catálogo Laguna (somente administrador).
 @endsection
 @section('acoes-topo')
-    <a class="botao" href="{{ $urlModulos }}"><i class="fa fa-pencil"></i> Editar no catálogo</a>
+    <a class="botao icone" href="{{ $urlModulos }}" title="Editar no catálogo" aria-label="Editar no catálogo"><i aria-hidden="true" class="fa fa-pencil"></i></a>
     <form method="post" action="{{ url('/assinatura-digital/configuracoes/ping') }}" style="display:inline">
         @csrf
-        <button class="botao claro" type="submit"><i class="fa fa-heartbeat"></i> Testar conexão</button>
+        <button class="botao claro icone" type="submit" title="Testar conexão" aria-label="Testar conexão"><i aria-hidden="true" class="fa fa-heartbeat"></i></button>
     </form>
     <form method="post" action="{{ url('/assinatura-digital/configuracoes/reparar-pendentes') }}" style="display:inline"
           onsubmit="return confirm('Reparar assinaturas pendentes e códigos HMAC?');">
         @csrf
-        <button class="botao claro" type="submit"><i class="fa fa-wrench"></i> Reparar pendentes</button>
+        <button class="botao claro icone" type="submit" title="Reparar pendentes" aria-label="Reparar pendentes"><i aria-hidden="true" class="fa fa-wrench"></i></button>
     </form>
-    <a class="botao claro" href="{{ url('/assinatura-digital') }}"><i class="fa fa-th-large"></i> Painel</a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital') }}" title="Painel" aria-label="Painel"><i aria-hidden="true" class="fa fa-th-large"></i></a>
 @endsection
 
 @section('conteudo')

@@ -7,8 +7,8 @@
     Documentos em que você já assinou. Use os filtros para ver o que ainda está em andamento ou o que já ficou pronto. A lista é paginada para não ocupar a tela inteira.
 @endsection
 @section('acoes-topo')
-    <a class="botao claro" href="{{ url('/painel') }}"><i class="fa fa-th-large"></i> Painel</a>
-    <a class="botao claro" href="{{ url('/assinatura-digital/pendencias') }}"><i class="fa fa-pencil-square-o"></i> Pendências</a>
+    <a class="botao claro icone" href="{{ url('/painel') }}" title="Painel" aria-label="Painel"><i aria-hidden="true" class="fa fa-th-large"></i></a>
+    <a class="botao claro icone" href="{{ url('/assinatura-digital/pendencias') }}" title="Pendências" aria-label="Pendências"><i aria-hidden="true" class="fa fa-pencil-square-o"></i></a>
 @endsection
 
 @section('conteudo')
