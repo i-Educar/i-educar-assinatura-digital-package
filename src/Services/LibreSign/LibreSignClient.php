@@ -3,6 +3,7 @@
 namespace iEducar\Packages\BuritiAssinaturaDigital\Services\LibreSign;
 
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 
@@ -304,7 +305,8 @@ final class LibreSignClient
 
     /**
      * Configura no LibreSign um rodapé elegante e baixo: só “Signed by LibreSign”, sem QR.
-     * Best-effort (occ/bootstrap é a fonte definitiva no ambiente Docker).
+     * Best-effort: em cloud (ex. cloud.libresign.coop) a API de config costuma cair em HTTP 429
+     * (bruteforce Nextcloud) — aí o rodapé fica a cargo da instância (painel/occ).
      *
      * @return array{ok:bool,via:string,mensagem:string}
      */
@@ -312,6 +314,34 @@ final class LibreSignClient
     {
         if (self::$rodapeAplicado && ! $forcar) {
             return ['ok' => true, 'via' => 'cache', 'mensagem' => 'Rodapé já aplicado nesta requisição.'];
+        }
+
+        $cacheKey = $this->chaveCacheRodape();
+        $cooldownKey = $cacheKey.':cooldown';
+
+        if (! $forcar && Cache::get($cacheKey) === 'ok') {
+            self::$rodapeAplicado = true;
+
+            return ['ok' => true, 'via' => 'cache', 'mensagem' => 'Rodapé já confirmado (cache).'];
+        }
+
+        if (! $this->deveAplicarRodapeViaApi()) {
+            self::$rodapeAplicado = true;
+            Cache::put($cacheKey, 'ok', now()->addDay());
+
+            return [
+                'ok' => true,
+                'via' => 'instancia',
+                'mensagem' => 'Rodapé gerenciado na instância LibreSign (API de config desligada para este host).',
+            ];
+        }
+
+        if (! $forcar && Cache::has($cooldownKey)) {
+            return [
+                'ok' => false,
+                'via' => 'cooldown',
+                'mensagem' => 'LibreSign em cooldown após HTTP 429. Aguarde alguns minutos ou configure o rodapé no painel/occ da instância.',
+            ];
         }
 
         $enabled = (bool) config('assinatura.libresign.footer_enabled', true);
@@ -336,16 +366,28 @@ final class LibreSignClient
         $asPass = $adminUser !== '' ? $adminPass : $this->password();
 
         $erros = [];
+        $okParcial = false;
 
-        // Policy API (LibreSign recente).
+        // Policy API (LibreSign recente) — uma tentativa; 429 aborta o lote.
         try {
             $this->putPolicySystem('add_footer', (string) $policy, $asUser, $asPass);
-            self::$rodapeAplicado = true;
+            $okParcial = true;
+            usleep(350_000);
         } catch (\Throwable $e) {
             $erros[] = 'policy: '.$e->getMessage();
+            if ($this->ehRateLimit($e)) {
+                $this->registrarCooldownRodape($cooldownKey);
+
+                return [
+                    'ok' => false,
+                    'via' => 'rate-limit',
+                    'mensagem' => 'LibreSign limitou requisições (HTTP 429). Não reenvie agora — '
+                        .'aguarde o delay do Nextcloud ou configure o rodapé no painel/occ. '.$e->getMessage(),
+                ];
+            }
         }
 
-        // App configs (LibreSign 10.x / estáveis).
+        // App configs (LibreSign 10.x / estáveis) — com pausa e abort em 429.
         $configs = [
             'add_footer' => $enabled ? '1' : '0',
             'write_qrcode_on_footer' => $qrcode ? '1' : '0',
@@ -357,28 +399,98 @@ final class LibreSignClient
         foreach ($configs as $key => $value) {
             try {
                 $this->setAppConfig('libresign', $key, $value, $asUser, $asPass);
-                self::$rodapeAplicado = true;
+                $okParcial = true;
+                usleep(350_000);
             } catch (\Throwable $e) {
                 $erros[] = $key.': '.$e->getMessage();
+                if ($this->ehRateLimit($e)) {
+                    $this->registrarCooldownRodape($cooldownKey);
+
+                    return [
+                        'ok' => $okParcial,
+                        'via' => $okParcial ? 'api-parcial' : 'rate-limit',
+                        'mensagem' => ($okParcial
+                            ? 'Rodapé parcial; parado no HTTP 429. '
+                            : 'LibreSign limitou requisições (HTTP 429). ')
+                            .'Aguarde alguns minutos ou use occ/painel. '.$e->getMessage(),
+                    ];
+                }
             }
         }
 
-        if (self::$rodapeAplicado) {
+        if ($okParcial) {
+            self::$rodapeAplicado = true;
+            Cache::put($cacheKey, 'ok', now()->addDay());
+            Cache::forget($cooldownKey);
+
             return [
                 'ok' => true,
                 'via' => $erros === [] ? 'api' : 'api-parcial',
                 'mensagem' => $erros === []
                     ? 'Rodapé LibreSign simples aplicado (sem QR).'
-                    : 'Rodapé parcialmente aplicado: '.implode('; ', $erros),
+                    : 'Rodapé parcialmente aplicado: '.implode('; ', array_slice($erros, 0, 3)),
             ];
         }
 
         return [
             'ok' => false,
             'via' => 'falha',
-            'mensagem' => 'Não foi possível aplicar rodapé via API. Rode o bootstrap Docker ou occ. '
-                .implode('; ', $erros),
+            'mensagem' => 'Não foi possível aplicar rodapé via API. No Docker: bootstrap/occ; '
+                .'em cloud: configure no painel LibreSign (LIBRESIGN_FOOTER_VIA_API=false). '
+                .implode('; ', array_slice($erros, 0, 3)),
         ];
+    }
+
+    /**
+     * Hosts locais (Docker) empurram config; cloud/SaaS não (evita 429).
+     */
+    public function deveAplicarRodapeViaApi(): bool
+    {
+        $raw = config('assinatura.libresign.footer_via_api');
+        if ($raw === false || $raw === 0 || $raw === '0' || $raw === 'false') {
+            return false;
+        }
+        if ($raw === true || $raw === 1 || $raw === '1' || $raw === 'true') {
+            return true;
+        }
+
+        $host = strtolower((string) (parse_url($this->base(), PHP_URL_HOST) ?: ''));
+        if ($host === '') {
+            return false;
+        }
+
+        $locais = [
+            'localhost',
+            '127.0.0.1',
+            'host.docker.internal',
+            'nextcloud',
+            'ieducar-libresign-nc',
+        ];
+        if (in_array($host, $locais, true) || str_ends_with($host, '.local') || str_ends_with($host, '.internal')) {
+            return true;
+        }
+
+        // cloud.libresign.coop e demais SaaS: não martelar provisioning_api.
+        return false;
+    }
+
+    private function chaveCacheRodape(): string
+    {
+        return 'assinatura:libresign:rodape:'.md5($this->base().'|'.(string) config('assinatura.libresign.footer_signed_by'));
+    }
+
+    private function registrarCooldownRodape(string $cooldownKey): void
+    {
+        Cache::put($cooldownKey, 1, now()->addMinutes(20));
+    }
+
+    private function ehRateLimit(\Throwable $e): bool
+    {
+        $msg = $e->getMessage();
+
+        return str_contains($msg, '429')
+            || str_contains($msg, 'maximum delay')
+            || str_contains($msg, 'Reached maximum');
     }
 
     /**

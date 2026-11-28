@@ -11,14 +11,23 @@ Referências:
 
 Por padrão o LibreSign desenha QR grande no rodapé — isso **cobre o conteúdo** e pode gerar página extra.
 
-Configuração Laguna (bootstrap Docker + API no ping / ao criar pedido):
+Alvo desejado:
 
 - `write_qrcode_on_footer=0`
 - `footer_signed_by=Signed by LibreSign`
 - `footer_validate_in=` (vazio)
 - `footer_template` Twig de **uma linha** (destaque só no Signed by LibreSign)
 
-Variáveis: `LIBRESIGN_FOOTER_QRCODE=false`, `LIBRESIGN_FOOTER_SIGNED_BY`, `LIBRESIGN_ADMIN_USER/PASSWORD` (para aplicar via API).
+**Onde aplicar**
+
+| Ambiente | Como |
+| --- | --- |
+| Docker local | `docker/libresign/scripts/bootstrap.sh` (`occ config:app:set …`) e, se host local, API no ping |
+| Cloud / SaaS (`cloud.libresign.coop`) | Painel da instância — **não** via API a cada ping (Nextcloud responde HTTP **429** / *Reached maximum delay*) |
+
+`LIBRESIGN_FOOTER_VIA_API`: `false` nunca; `true` sempre (com cache e abort em 429); vazio = **auto** (só hosts locais).
+
+Outras: `LIBRESIGN_FOOTER_QRCODE=false`, `LIBRESIGN_FOOTER_SIGNED_BY`, `LIBRESIGN_ADMIN_USER/PASSWORD`.
 
 Documentos **já assinados** com QR antigo não mudam — é preciso reemitir / assinar de novo.
 

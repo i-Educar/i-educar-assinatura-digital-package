@@ -78,7 +78,9 @@ final class AssinaturaController extends Controller
             $ok = $this->libreSign->ping();
             $rodapeMsg = '';
             if ($ok) {
-                $rodape = $this->libreSign->garantirRodapeSimples(true);
+                // Em cloud não força regravação (HTTP 429 / bruteforce Nextcloud).
+                $forcar = $this->libreSign->deveAplicarRodapeViaApi();
+                $rodape = $this->libreSign->garantirRodapeSimples($forcar);
                 $rodapeMsg = ' · Rodapé: '.($rodape['mensagem'] ?? '');
             }
 

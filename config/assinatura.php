@@ -45,6 +45,14 @@ return [
         'footer_qrcode' => filter_var(env('LIBRESIGN_FOOTER_QRCODE', false), FILTER_VALIDATE_BOOL),
         'footer_signed_by' => (string) env('LIBRESIGN_FOOTER_SIGNED_BY', 'Signed by LibreSign'),
         'footer_validate_in' => (string) env('LIBRESIGN_FOOTER_VALIDATE_IN', ''),
+        /*
+        | Empurrar rodapé via API (policies + provisioning_api).
+        | null/auto = só em hosts locais (Docker). Em cloud.libresign.coop o Nextcloud
+        | aplica bruteforce/429 se várias configs forem gravadas em sequência.
+        | false = nunca via API (use occ/bootstrap ou painel da instância).
+        | true = sempre tenta (com cache e abort imediato em 429).
+        */
+        'footer_via_api' => env('LIBRESIGN_FOOTER_VIA_API'),
         'admin_user' => (string) env('LIBRESIGN_ADMIN_USER', 'admin'),
         'admin_password' => (string) env('LIBRESIGN_ADMIN_PASSWORD', 'admin'),
     ],

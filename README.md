@@ -38,7 +38,7 @@ Permite que a SME e as escolas solicitem, acompanhem e concluam assinaturas (ata
 | --- | --- |
 | **i-Educar** | **2.12.x** |
 | **i-Diário** | Portabilis i-Diário (API / SSO do núcleo) |
-| Pacote | `0.1.4` |
+| Pacote | `0.1.5` |
 
 Declarado em `composer.json` → `extra.ieducar` / `extra.idiario`.
 
