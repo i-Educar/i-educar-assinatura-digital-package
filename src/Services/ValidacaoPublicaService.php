@@ -292,14 +292,14 @@ final class ValidacaoPublicaService
         )));
 
         $uuid = trim((string) ($pedido['libresign_uuid'] ?? ''));
-        $urlLibreSign = '';
-        if ($uuid !== '' && class_exists(LibreSign\LibreSignClient::class)) {
-            try {
-                $urlLibreSign = app(LibreSign\LibreSignClient::class)->urlValidacao($uuid);
-            } catch (Throwable) {
-                $urlLibreSign = '';
-            }
-        }
+        $metaValidacao = is_array($meta['validacao'] ?? null) ? $meta['validacao'] : [];
+        $urlPedido = trim((string) ($pedido['url_validacao'] ?? ''));
+        $urlLibreSign = (string) ($this->resolverUrlLibreSign($uuid, [
+            $meta['url_validacao_libresign'] ?? null,
+            $meta['url_libresign'] ?? null,
+            $metaValidacao['url_libresign'] ?? null,
+            str_contains(mb_strtolower($urlPedido), 'libresign') ? $urlPedido : null,
+        ]) ?? '');
 
         $faltantesTxt = $etapasFaltantes !== [] ? ' Etapas faltantes: '.implode(', ', $etapasFaltantes).'.' : '';
 
@@ -576,6 +576,22 @@ final class ValidacaoPublicaService
             ),
         };
 
+        $validacaoPayload = is_array($payload['validacao'] ?? null) ? $payload['validacao'] : [];
+        $uuidLibreSign = trim((string) (
+            $payload['libresign_uuid']
+            ?? $doc['libresign_uuid']
+            ?? $validacaoPayload['libresign_uuid']
+            ?? ''
+        ));
+        $urlCandBridge = trim((string) ($validacaoPayload['url'] ?? $doc['url_validacao'] ?? ''));
+        $urlLibreSign = $this->resolverUrlLibreSign($uuidLibreSign, [
+            $validacaoPayload['url_libresign'] ?? null,
+            $payload['url_libresign'] ?? null,
+            $payload['url_validacao_libresign'] ?? null,
+            $doc['url_libresign'] ?? null,
+            str_contains(mb_strtolower($urlCandBridge), 'libresign') ? $urlCandBridge : null,
+        ]);
+
         return [
             'encontrado' => $encontrado,
             'autentico' => $ok,
@@ -601,11 +617,51 @@ final class ValidacaoPublicaService
                 'etapas_faltantes' => $etapasFaltantes,
                 'referencia' => ! empty($payload['pedido_id']) ? 'Pedido #'.(int) $payload['pedido_id'] : null,
                 'escopo_consulta' => $escopoAssinatura ? 'assinatura' : 'documento',
-                'trilha_libresign' => ! empty($payload['libresign_uuid']) || ! empty($payload['pedido_id']),
+                'trilha_libresign' => $urlLibreSign !== null || $uuidLibreSign !== '' || ! empty($payload['pedido_id']),
+                'libresign_uuid' => $uuidLibreSign !== '' ? $uuidLibreSign : null,
+                'url_libresign' => $urlLibreSign,
             ],
             'assinaturas' => $assinaturas,
             'aviso_lgpd' => $aviso,
         ];
+    }
+
+    /**
+     * Prioriza URL pública do LibreSign; monta a partir do UUID quando possível.
+     *
+     * @param  list<mixed>  $candidatos
+     */
+    private function resolverUrlLibreSign(?string $uuid, array $candidatos = []): ?string
+    {
+        $uuid = trim((string) $uuid);
+        $urls = [];
+        foreach ($candidatos as $candidato) {
+            $url = trim((string) $candidato);
+            if ($url === '') {
+                continue;
+            }
+            $urls[] = $url;
+        }
+
+        foreach ($urls as $url) {
+            if (str_contains($url, '/apps/libresign/') || str_contains(mb_strtolower($url), 'libresign')) {
+                return $url;
+            }
+        }
+
+        if ($uuid !== '' && class_exists(LibreSign\LibreSignClient::class)) {
+            try {
+                $gerada = trim((string) app(LibreSign\LibreSignClient::class)->urlValidacao($uuid));
+                if ($gerada !== '') {
+                    return $gerada;
+                }
+            } catch (Throwable) {
+                //
+            }
+        }
+
+        // Não devolver portal i-Educar como se fosse LibreSign.
+        return null;
     }
 
     /**

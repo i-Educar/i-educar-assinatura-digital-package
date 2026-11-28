@@ -1,7 +1,7 @@
 {
   "name": "buriti/i-educar-assinatura-digital-package",
   "description": "Assinatura digital de documentos e protocolos no i-Educar via LibreSign (SME, externos e API Android assinar-web).",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "type": "library",
   "license": "GPL-2.0-or-later",
   "keywords": [

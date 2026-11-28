@@ -66,14 +66,17 @@
         .botao.sm { padding: 7px 10px; font-size: .82rem; }
 
         .painel {
-            display: grid; grid-template-columns: minmax(260px, 0.95fr) minmax(320px, 1.35fr);
-            gap: 12px; align-items: start;
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 12px; align-items: stretch;
         }
         .cartao {
             background: var(--superficie); border: 1px solid var(--linha); border-radius: 14px;
             padding: 14px 14px 16px; border-top: 3px solid var(--cor);
             box-shadow: 0 8px 22px rgba(21,34,43,.05);
+            min-height: 100%;
+            display: flex; flex-direction: column;
         }
+        .cartao .acoes-doc { margin-top: auto; padding-top: 12px; }
         .cartao h2 {
             margin: 0 0 10px; font-size: .78rem; font-weight: 800; letter-spacing: .08em;
             text-transform: uppercase; color: var(--suave); display: flex; align-items: center; gap: 8px;
@@ -116,13 +119,13 @@
         .badge.warn { background: var(--warn-fundo); color: var(--warn); }
         .badge.erro { background: var(--erro-fundo); color: var(--erro); }
 
-        /* Fluxograma horizontal */
+        /* Fluxograma horizontal — cards com largura uniforme */
         .fluxo {
             display: flex; align-items: stretch; gap: 0; overflow-x: auto;
             padding: 6px 2px 4px; scrollbar-width: thin;
         }
         .fluxo-etapa {
-            flex: 1 1 0; min-width: 132px; max-width: 200px;
+            flex: 1 1 0; min-width: 148px; max-width: none;
             display: flex; flex-direction: column; align-items: center; position: relative;
             padding: 0 6px;
         }
@@ -160,8 +163,10 @@
             outline-offset: 2px;
         }
         .fluxo-card {
-            width: 100%; margin-top: 10px; padding: 8px 8px 9px; border-radius: 10px;
-            border: 1px solid var(--linha); background: #fafcfd; text-align: center;
+            width: 100%; flex: 1; margin-top: 10px; padding: 10px 8px;
+            border-radius: 10px; border: 1px solid var(--linha); background: #fafcfd;
+            text-align: center; display: flex; flex-direction: column; justify-content: flex-start;
+            min-height: 118px; box-sizing: border-box;
         }
         .fluxo-etapa.is-done .fluxo-card {
             background: color-mix(in srgb, var(--ok-fundo) 70%, #fff);
@@ -220,7 +225,8 @@
         @media (max-width: 860px) {
             .topo, .painel, .vazio-hint { grid-template-columns: 1fr; }
             .legenda { grid-template-columns: 1fr; }
-            .fluxo-etapa { min-width: 120px; flex: 0 0 140px; }
+            .fluxo-etapa { min-width: 140px; flex: 0 0 148px; max-width: 148px; }
+            .fluxo-card { min-height: 110px; }
         }
         @media (max-width: 520px) {
             .meta-grid { grid-template-columns: 1fr; }
@@ -338,9 +344,13 @@
 
                     <div class="acoes-doc">
                         @if(!empty($d['url_libresign']))
-                            <a class="botao sm" href="{{ $d['url_libresign'] }}" target="_blank" rel="noopener" style="background:var(--cor);color:#fff">
-                                <i class="fa fa-external-link"></i> LibreSign
+                            <a class="botao sm" href="{{ $d['url_libresign'] }}" target="_blank" rel="noopener" style="background:var(--cor);color:#fff" title="Abrir verificação no LibreSign">
+                                <i class="fa fa-external-link"></i> Verificar no LibreSign
                             </a>
+                        @elseif(!empty($d['libresign_uuid']) && !empty($d['trilha_libresign']))
+                            <span class="botao sm" style="background:#f4f7f9;color:var(--suave);border:1px dashed var(--linha);cursor:default" title="UUID LibreSign sem URL pública configurada">
+                                <i class="fa fa-cloud"></i> LibreSign · {{ \Illuminate\Support\Str::limit($d['libresign_uuid'], 12) }}
+                            </span>
                         @endif
                         <a class="botao sm" href="{{ url('/assinatura-digital/verificar') }}" style="background:#fff;color:var(--cor);border:1px solid color-mix(in srgb, var(--cor) 35%, var(--linha))">
                             <i class="fa fa-search"></i> Nova consulta
