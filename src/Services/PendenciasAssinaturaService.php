@@ -419,6 +419,10 @@ final class PendenciasAssinaturaService
             }
         }
 
+        // Almox: etapas assinadas localmente (ex.: Conferência) mesmo se o LibreSign
+        // falhou (429) ou ficou em "agendado" sem pedido_assinatura_id.
+        $out = array_merge($out, $this->itensAlmoxAssinadosLocalmente($ids, max(50, $limit)));
+
         // Uma linha por documento de origem (ex.: nota almox #158 com 4 pedidos LS = 1 item).
         $out = $this->consolidarPorDocumentoOrigem($out);
 
@@ -483,6 +487,168 @@ final class PendenciasAssinaturaService
             'total_filtrado' => $totalFiltrado,
             'ultima_pagina' => $ultimaPagina,
         ];
+    }
+
+    /**
+     * Notas de almox em que o usuário assinou uma etapa no i-Educar, mesmo sem
+     * pedido LibreSign (falha de API / 429 / ainda agendado).
+     *
+     * @param  array{user_id:?int,login:?string}  $ids
+     * @return list<array<string,mixed>>
+     */
+    private function itensAlmoxAssinadosLocalmente(array $ids, int $limit): array
+    {
+        if (! class_exists(\iEducar\Packages\BuritiAlmoxarifadoEscolar\Services\PocRegistro::class)
+            || ! class_exists(\iEducar\Packages\BuritiAlmoxarifadoEscolar\Services\PedidoCarrinho::class)
+            || ! \iEducar\Packages\BuritiAlmoxarifadoEscolar\Services\PocRegistro::disponivel()
+        ) {
+            return [];
+        }
+
+        $uid = (int) ($ids['user_id'] ?? 0);
+        $login = mb_strtolower(trim((string) ($ids['login'] ?? '')));
+        if ($uid <= 0 && $login === '') {
+            return [];
+        }
+
+        $etapas = ['aceite', 'entrega', 'conferencia'];
+        $out = [];
+
+        try {
+            $rows = DB::table(\iEducar\Packages\BuritiAlmoxarifadoEscolar\Services\PocRegistro::TABELA)
+                ->where('tipo', \iEducar\Packages\BuritiAlmoxarifadoEscolar\Services\PedidoCarrinho::TIPO)
+                ->orderByDesc('id')
+                ->limit(max(40, min(120, $limit * 2)))
+                ->get(['id', 'payload', 'created_at', 'updated_at']);
+        } catch (Throwable) {
+            return [];
+        }
+
+        foreach ($rows as $row) {
+            $payload = json_decode((string) ($row->payload ?? ''), true);
+            if (! is_array($payload)) {
+                continue;
+            }
+            $assin = is_array($payload['assinaturas'] ?? null) ? $payload['assinaturas'] : [];
+            $meuPapel = null;
+            $assineiRaw = null;
+            $assinaturasColetadas = [];
+            $pendentes = [];
+            $concluidas = 0;
+
+            foreach ($etapas as $etapa) {
+                $a = is_array($assin[$etapa] ?? null) ? $assin[$etapa] : null;
+                $rotulo = \iEducar\Packages\BuritiAlmoxarifadoEscolar\Services\PedidoCarrinho::rotuloEtapa($etapa);
+                $feita = $a !== null && trim((string) ($a['responsavel'] ?? '')) !== '';
+                if (! $feita) {
+                    $pendentes[] = $rotulo;
+                    continue;
+                }
+                $concluidas++;
+                $aUid = (int) ($a['responsavel_id'] ?? 0);
+                $aLogin = mb_strtolower(trim((string) ($a['login'] ?? '')));
+                $pertence = ($uid > 0 && $aUid === $uid)
+                    || ($login !== '' && $aLogin !== '' && $aLogin === $login);
+                $quando = trim((string) ($a['quando_raw'] ?? $a['quando_iso'] ?? $a['quando'] ?? ''));
+                $quandoHumano = $this->humanizarDataHora($quando !== '' ? $quando : null);
+                $assinaturasColetadas[] = [
+                    'papel' => $rotulo,
+                    'nome' => trim((string) ($a['responsavel'] ?? '')) ?: null,
+                    'quando' => $quando !== '' ? $quando : null,
+                    'quando_humano' => $quandoHumano['absoluto'] ?? null,
+                    'quando_relativo' => $quandoHumano['relativo'] ?? null,
+                    'minha' => $pertence,
+                ];
+                if ($pertence && $meuPapel === null) {
+                    $meuPapel = $rotulo;
+                    $assineiRaw = $quando;
+                }
+            }
+
+            if ($meuPapel === null) {
+                continue;
+            }
+
+            $pedidoId = (int) $row->id;
+            $completo = $pendentes === [];
+            $total = count($etapas);
+            $titulo = 'Nota almoxarifado #'.$pedidoId;
+            $assinei = $this->humanizarDataHora($assineiRaw !== null && $assineiRaw !== '' ? $assineiRaw : null);
+            $assineiIso = null;
+            if ($assineiRaw !== null && $assineiRaw !== '') {
+                try {
+                    $assineiIso = \Illuminate\Support\Carbon::parse($assineiRaw)->toIso8601String();
+                } catch (\Throwable) {
+                    $assineiIso = null;
+                }
+            }
+
+            // Preferir link do pedido LS mais recente da nota, se existir.
+            $pedidoLsId = 0;
+            foreach (array_reverse($etapas) as $etapa) {
+                $a = is_array($assin[$etapa] ?? null) ? $assin[$etapa] : null;
+                $lsId = (int) ($a['pedido_assinatura_id'] ?? 0);
+                if ($lsId > 0) {
+                    $pedidoLsId = $lsId;
+                    break;
+                }
+            }
+
+            $linhasTempo = [];
+            if (! empty($assinei['absoluto'])) {
+                $linhasTempo[] = 'Você assinou '.$assinei['absoluto']
+                    .(! empty($assinei['relativo']) ? ' ('.$assinei['relativo'].')' : '')
+                    .' — '.$meuPapel;
+            }
+            if (! $completo && $pendentes !== []) {
+                $linhasTempo[] = 'Já assinou — ainda faltam etapas: '.implode(', ', $pendentes);
+            } elseif ($completo) {
+                $linhasTempo[] = 'Processo finalizado (todas as etapas da nota)';
+            }
+
+            $out[] = [
+                'pedido_id' => $pedidoLsId > 0 ? $pedidoLsId : $pedidoId,
+                'titulo' => $titulo,
+                'estado' => $completo ? 'completo' : 'parcial',
+                'estado_rotulo' => $completo
+                    ? 'Pronto — todas as etapas'
+                    : 'Já assinei — faltam outras etapas',
+                'progresso' => $concluidas.'/'.$total,
+                'assinaturas_feitas' => $concluidas,
+                'assinaturas_total' => $total,
+                'assinatura_unica' => false,
+                'cargo' => $meuPapel,
+                'quando' => $assinei['absoluto'] ?? $assineiRaw,
+                'gerado_em' => null,
+                'gerado_em_relativo' => null,
+                'assinei_em' => $assinei['absoluto'] ?? null,
+                'assinei_em_relativo' => $assinei['relativo'] ?? null,
+                'assinei_em_iso' => $assineiIso,
+                'finalizado_em' => $completo ? ($assinei['absoluto'] ?? null) : null,
+                'finalizado_em_relativo' => $completo ? ($assinei['relativo'] ?? null) : null,
+                'linhas_tempo' => $linhasTempo,
+                'resumo_tempo' => implode(' · ', $linhasTempo),
+                'assinaturas_coletadas' => $assinaturasColetadas,
+                'outras_assinaturas_humano' => [],
+                'url_ver' => $pedidoLsId > 0
+                    ? url('/assinatura-digital/pedidos/'.$pedidoLsId.'/ver')
+                    : url('/almoxarifado-escolar/pedidos/'.$pedidoId.'/nota'),
+                'url_pdf' => $pedidoLsId > 0
+                    ? url('/assinatura-digital/pedidos/'.$pedidoLsId.'/pdf')
+                    : url('/almoxarifado-escolar/pedidos/'.$pedidoId.'/nota/pdf'),
+                'pendentes_outros' => $pendentes,
+                'fluxo_multi_etapa' => true,
+                'modulo' => 'almoxarifado',
+                'modulo_rotulo' => $this->rotuloModuloAssinatura('almoxarifado'),
+                '_chave_origem' => 'almoxarifado:'.$pedidoId,
+            ];
+
+            if (count($out) >= $limit) {
+                break;
+            }
+        }
+
+        return $out;
     }
 
     /**
