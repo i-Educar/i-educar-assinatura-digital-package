@@ -1,42 +1,123 @@
 @extends('assinatura::layout')
 
 @section('titulo', 'Assinatura digital')
+@section('icone-tela', 'fa-pencil-square-o')
+@section('titulo-tela', 'Assinatura digital')
+@section('lead')
+    PDFs assinados no LibreSign. Aqui você consulta pedidos, baixa por proxy e valida autenticidade.
+@endsection
+@section('acoes-topo')
+    <a class="botao claro" href="{{ url('/assinatura-digital/pedidos') }}"><i class="fa fa-list"></i> Pedidos</a>
+    @if(!empty($isAssinaturaAdmin))
+        <a class="botao" href="{{ url('/assinatura-digital/testes') }}"><i class="fa fa-flask"></i> Testes</a>
+        <a class="botao claro" href="{{ url('/assinatura-digital/configuracoes') }}"><i class="fa fa-sliders"></i> Configurações</a>
+    @endif
+    <a class="botao claro" href="{{ url('/assinatura-digital/verificar') }}" target="_blank"><i class="fa fa-qrcode"></i> Validação pública</a>
+@endsection
 
 @section('conteudo')
-<div class="cabeca-tela">
-    <div class="identidade-tela">
-        <div class="marca-tela"><i class="fa fa-pencil-square-o"></i></div>
-        <div>
-            <p class="titulo-modulo">LibreSign</p>
-            <h1>Assinatura digital</h1>
-            <p class="lead">PDF assinado fica no LibreSign. Aqui você vê, baixa (proxy) e valida autenticidade.</p>
-        </div>
-    </div>
-    <div class="acoes-tela">
-        <a class="botao" href="{{ url('/assinatura-digital/testes') }}"><i class="fa fa-flask"></i> Rodar testes</a>
-        <a class="botao claro" href="{{ url('/exportacao/validar') }}"><i class="fa fa-qrcode"></i> Validar documento</a>
-    </div>
+@php
+    $total = count($pedidos);
+    $assinados = collect($pedidos)->where('status', 'assinado')->count();
+    $pendentes = collect($pedidos)->whereIn('status', ['aguardando', 'parcial', ''])->count();
+@endphp
+
+<div class="numeros">
+    <article style="--tom: var(--cor-tela)">
+        <div class="kpi-ico"><i class="fa fa-cloud"></i></div>
+        <span>LibreSign</span>
+        <strong>{{ !empty($libresignOk) ? 'Online' : 'Offline' }}</strong>
+    </article>
+    <article style="--tom: {{ !empty($libresignOk) ? 'var(--ok)' : 'var(--erro)' }}">
+        <div class="kpi-ico"><i class="fa fa-files-o"></i></div>
+        <span>Últimos pedidos</span>
+        <strong>{{ $total }}</strong>
+    </article>
+    <article style="--tom: var(--ok)">
+        <div class="kpi-ico"><i class="fa fa-check-circle"></i></div>
+        <span>Assinados</span>
+        <strong>{{ $assinados }}</strong>
+    </article>
+    <article style="--tom: var(--ambar)">
+        <div class="kpi-ico"><i class="fa fa-clock-o"></i></div>
+        <span>Pendentes</span>
+        <strong>{{ $pendentes }}</strong>
+    </article>
+</div>
+
+<div class="bloco">
+    <h2><i class="fa fa-compass"></i> Atalhos</h2>
+    <ul class="atalhos">
+        <li>
+            <a href="{{ url('/assinatura-digital/verificar') }}" target="_blank">
+                <i class="fa fa-shield"></i>
+                <span>Consulta pública<small>Código / QR · LGPD</small></span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url('/assinatura-digital/pendencias') }}">
+                <i class="fa fa-pencil-square-o"></i>
+                <span>Minhas pendências<small>Confirmar e assinar no LibreSign</small></span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url('/assinatura-digital/assinados') }}">
+                <i class="fa fa-check-square-o"></i>
+                <span>Já assinei<small>Prontos ou aguardando outras etapas</small></span>
+            </a>
+        </li>
+        <li>
+            <a href="{{ url('/assinatura-digital/pedidos') }}">
+                <i class="fa fa-list"></i>
+                <span>Pedidos<small>Status e PDF no LibreSign</small></span>
+            </a>
+        </li>
+        @if(!empty($isAssinaturaAdmin))
+            <li>
+                <a href="{{ url('/assinatura-digital/configuracoes') }}">
+                    <i class="fa fa-sliders"></i>
+                    <span>Configurações<small>Instância e signatários</small></span>
+                </a>
+            </li>
+            <li>
+                <form method="post" action="{{ url('/assinatura-digital/configuracoes/reparar-pendentes') }}"
+                      onsubmit="return confirm('Sincronizar pedidos pendentes e corrigir códigos HMAC?');">
+                    @csrf
+                    <button type="submit">
+                        <i class="fa fa-wrench"></i>
+                        <span>Reparar pendentes<small>Sync LibreSign + HMAC</small></span>
+                    </button>
+                </form>
+            </li>
+        @endif
+    </ul>
 </div>
 
 <div class="grade-2">
     <div class="bloco">
         <h2><i class="fa fa-cloud"></i> LibreSign</h2>
         @if($libresignOk)
-            <p><span class="badge ok">online</span> <code>{{ $baseUrl }}</code></p>
+            <p><span class="badge ok"><i class="fa fa-check"></i> online</span> <code>{{ $baseUrl }}</code></p>
         @else
-            <p><span class="badge erro">indisponível</span></p>
-            <p class="texto-suave">Suba <code>docker/libresign</code> e configure <code>LIBRESIGN_*</code> no .env.</p>
+            <p><span class="badge erro"><i class="fa fa-ban"></i> indisponível</span></p>
+            <p class="texto-suave">Configure a URL em
+                @if(!empty($isAssinaturaAdmin))
+                    <a href="{{ url('/assinatura-digital/configuracoes') }}">Configurações</a>
+                @else
+                    Configurações (admin)
+                @endif
+                ou suba <code>docker/libresign</code>.</p>
         @endif
     </div>
     <div class="bloco">
         <h2><i class="fa fa-hdd-o"></i> Armazenamento</h2>
-        <p>Modo: <strong>somente LibreSign</strong> — sem cópia no storage do i-Educar.</p>
-        <p class="texto-suave">Ver/Baixar fazem proxy sob demanda.</p>
+        <p>Modo: <strong>{{ !empty($cfg['somente_libresign'] ?? true) ? 'somente LibreSign' : 'permite cópia local' }}</strong></p>
+        <p class="texto-suave">Ver/Baixar fazem proxy sob demanda. Validação pública: {{ !empty($cfg['validacao_publica'] ?? true) ? 'ligada' : 'desligada' }}.</p>
     </div>
 </div>
 
 <div class="bloco">
-    <h2>Últimos pedidos</h2>
+    <h2><i class="fa fa-history"></i> Últimos pedidos</h2>
     @if(count($pedidos) === 0)
         <p class="texto-suave">Nenhum pedido ainda. Use os testes de assinatura única ou múltipla.</p>
     @else
@@ -51,11 +132,11 @@
                     <td>{{ $p['cenario'] }}</td>
                     <td>
                         @php $st = $p['status'] ?? ''; @endphp
-                        <span class="badge {{ $st === 'assinado' ? 'ok' : ($st === 'parcial' ? 'warn' : '') }}">{{ $st }}</span>
+                        <span class="badge {{ $st === 'assinado' ? 'ok' : ($st === 'parcial' ? 'warn' : '') }}">{{ $st ?: '—' }}</span>
                     </td>
                     <td>
                         @if(!empty($p['codigo_validacao']))
-                            <a href="{{ $p['url_validacao'] ?? url('/exportacao/validar/'.$p['codigo_validacao']) }}">{{ $p['codigo_validacao'] }}</a>
+                            <a href="{{ $p['url_validacao'] ?? url('/assinatura-digital/verificar/'.$p['codigo_validacao']) }}">{{ $p['codigo_validacao'] }}</a>
                         @else
                             —
                         @endif

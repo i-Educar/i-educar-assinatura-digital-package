@@ -1,57 +1,109 @@
 @extends('assinatura::layout')
 
 @section('titulo', $pedido['titulo'] ?? 'Pedido')
+@section('icone-tela', 'fa-file-text-o')
+@section('titulo-tela', $pedido['titulo'] ?? 'Pedido')
+@section('lead')
+    @php
+        $metaLead = is_array($pedido['meta'] ?? null) ? $pedido['meta'] : [];
+        $etapaLead = trim((string) ($metaLead['etapa_rotulo'] ?? $metaLead['status_documento'] ?? ''));
+        if ($etapaLead === '' && ! empty($metaLead['etapa'])) {
+            $et = (string) $metaLead['etapa'];
+            $etapaLead = match ($et) {
+                'separacao' => 'Separação',
+                'aceite' => 'Aceite',
+                'entrega' => 'Entrega',
+                'conferencia' => 'Conferência',
+                default => ucfirst($et),
+            };
+        }
+    @endphp
+    Pedido #{{ $pedido['id'] }}
+    @if($etapaLead !== '')
+        · Status: <strong>{{ $etapaLead }}</strong>
+    @else
+        · status {{ $pedido['status'] ?? '—' }}
+    @endif
+    · cenário {{ $pedido['cenario'] ?? '—' }}
+@endsection
+@section('acoes-topo')
+    <a class="botao claro" href="{{ url('/assinatura-digital/pedidos') }}"><i class="fa fa-arrow-left"></i> Pedidos</a>
+    @if(!empty($pedido['libresign_uuid']))
+        <a class="botao" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/ver') }}" target="_blank"><i class="fa fa-eye"></i> Ver PDF</a>
+        <a class="botao claro" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/baixar') }}"><i class="fa fa-download"></i> Baixar</a>
+    @endif
+    <form method="post" action="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/sincronizar') }}" style="display:inline">
+        @csrf
+        <button class="botao claro" type="submit"><i class="fa fa-refresh"></i> Sincronizar</button>
+    </form>
+@endsection
 
 @section('conteudo')
-<div class="cabeca-tela">
-    <div class="identidade-tela">
-        <div class="marca-tela"><i class="fa fa-file-text-o"></i></div>
-        <div>
-            <p class="titulo-modulo">Pedido #{{ $pedido['id'] }}</p>
-            <h1>{{ $pedido['titulo'] }}</h1>
-            <p class="lead">Cenário {{ $pedido['cenario'] }} · status {{ $pedido['status'] }}</p>
-        </div>
-    </div>
-    <div class="acoes-tela">
-        @if(($pedido['status'] ?? '') === 'assinado' || ($pedido['status_libresign'] ?? 0) == 3)
-            <a class="botao" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/ver') }}" target="_blank"><i class="fa fa-eye"></i> Ver PDF</a>
-            <a class="botao claro" href="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/baixar') }}"><i class="fa fa-download"></i> Baixar</a>
-        @endif
-        <form method="post" action="{{ url('/assinatura-digital/pedidos/'.$pedido['id'].'/sincronizar') }}">
-            @csrf
-            <button class="botao claro" type="submit"><i class="fa fa-refresh"></i> Sincronizar</button>
-        </form>
-    </div>
-</div>
-
 <div class="grade-2">
     <div class="bloco">
-        <h2>LibreSign</h2>
+        <h2><i class="fa fa-cloud"></i> LibreSign</h2>
         <p>UUID: <code>{{ $pedido['libresign_uuid'] ?? '—' }}</code></p>
         <p>File id: <code>{{ $pedido['libresign_file_id'] ?? '—' }}</code></p>
         <p>Status LS: <code>{{ $pedido['status_libresign'] ?? '—' }}</code></p>
         <p class="texto-suave">Arquivo físico somente no Nextcloud/LibreSign.</p>
     </div>
     <div class="bloco">
-        <h2>Validação pública</h2>
+        <h2><i class="fa fa-qrcode"></i> Validação pública</h2>
         @if(!empty($pedido['codigo_validacao']))
             <p>Código: <strong>{{ $pedido['codigo_validacao'] }}</strong></p>
-            <p><a href="{{ $pedido['url_validacao'] }}">Abrir validação</a></p>
-            <p class="texto-suave">Também em <code>/exportacao/validar</code>.</p>
+            <p>
+                <a class="botao sm claro" href="{{ $pedido['url_validacao'] ?? url('/assinatura-digital/verificar/'.$pedido['codigo_validacao']) }}" target="_blank">
+                    <i class="fa fa-external-link"></i> Conferir autenticidade
+                </a>
+            </p>
         @else
-            <p class="texto-suave">Disponível quando o fluxo estiver totalmente assinado (status 3).</p>
+            <p class="texto-suave">Disponível quando o fluxo estiver totalmente assinado ou registrado na emissão.</p>
         @endif
     </div>
 </div>
 
 <div class="bloco">
-    <h2>Signatários</h2>
-    <ul>
-        @foreach(($pedido['signatarios'] ?? []) as $s)
-            <li>{{ $s['displayName'] ?? ($s['account'] ?? $s['email'] ?? '—') }}
-                @if(!empty($s['account'])) <code>{{ $s['account'] }}</code> @endif
-            </li>
-        @endforeach
-    </ul>
+    <h2><i class="fa fa-pencil-square-o"></i> Assinaturas</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:28px 24px;margin-top:8px;">
+        @php
+            $lista = is_array($assinantes ?? null) ? $assinantes : [];
+            if ($lista === []) {
+                $visuais = is_array($pedido['meta']['assinaturas_visuais'] ?? null)
+                    ? $pedido['meta']['assinaturas_visuais']
+                    : [];
+                $lista = $visuais !== [] ? $visuais : ($pedido['signatarios'] ?? []);
+            }
+        @endphp
+        @forelse($lista as $s)
+            @php
+              $concluida = array_key_exists('concluida', $s)
+                  ? ! empty($s['concluida'])
+                  : trim((string) ($s['nome'] ?? $s['displayName'] ?? $s['responsavel'] ?? '')) !== '';
+              $statusLocal = $s['status'] ?? null;
+              if ($statusLocal === null || $statusLocal === '') {
+                  $statusLocal = $concluida
+                      ? 'Assinado digitalmente'
+                      : 'Aguardando assinatura';
+              }
+              $assinante = [
+                'nome' => $concluida
+                    ? ($s['nome'] ?? ($s['displayName'] ?? $s['account'] ?? $s['email'] ?? $s['responsavel'] ?? ''))
+                    : '',
+                'cargo' => $s['cargo'] ?? '',
+                'account' => $s['account'] ?? null,
+                'quando' => $concluida ? ($s['quando'] ?? null) : null,
+                'status' => $statusLocal,
+                'codigo_validacao' => $concluida ? ($s['codigo_validacao'] ?? null) : null,
+                'url_validacao' => $concluida ? ($s['url_validacao'] ?? null) : null,
+              ];
+            @endphp
+            @include('assinatura::partials.bloco-assinante', [
+              'assinante' => $assinante,
+              'cor' => ($identidade['cor'] ?? null) ?: '#0f4c5c',
+            ])
+        @empty
+            <p class="texto-suave">Nenhum signatário.</p>
+        @endforelse
+    </div>
 </div>
 @endsection

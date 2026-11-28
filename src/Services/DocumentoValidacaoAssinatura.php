@@ -23,13 +23,23 @@ final class DocumentoValidacaoAssinatura
         }
 
         $tipo = (string) config('assinatura.validacao.tipo_documento', 'assinatura_digital_libresign');
+        $signatarios = is_array($pedido['signatarios'] ?? null) ? $pedido['signatarios'] : [];
+        $signatarios = array_map(static function ($s): array {
+            if (! is_array($s)) {
+                return [];
+            }
+            unset($s['password']);
+
+            return $s;
+        }, $signatarios);
+
         $payload = [
             'titulo' => (string) ($pedido['titulo'] ?? ''),
             'cenario' => (string) ($pedido['cenario'] ?? ''),
             'libresign_uuid' => (string) ($pedido['libresign_uuid'] ?? ''),
             'libresign_file_id' => (string) ($pedido['libresign_file_id'] ?? ''),
             'pedido_id' => (int) ($pedido['id'] ?? 0),
-            'signatarios' => $pedido['signatarios'] ?? [],
+            'signatarios' => array_values(array_filter($signatarios)),
             'armazenamento' => 'libresign',
             'ver_url' => url('/assinatura-digital/pedidos/'.(int) ($pedido['id'] ?? 0).'/ver'),
             'baixar_url' => url('/assinatura-digital/pedidos/'.(int) ($pedido['id'] ?? 0).'/baixar'),
@@ -43,9 +53,13 @@ final class DocumentoValidacaoAssinatura
             return null;
         }
 
+        $codigo = (string) $reg['codigo'];
+        // URL canônica do módulo (tela pública LGPD), não a rota interna do validador.
+        $url = app(ValidacaoPublicaService::class)->urlPublica($codigo);
+
         return [
-            'codigo' => (string) $reg['codigo'],
-            'url' => (string) $reg['url'],
+            'codigo' => $codigo,
+            'url' => $url,
             'qr_data_uri' => $reg['qr_data_uri'] ?? null,
             'via' => (string) ($reg['via'] ?? ''),
         ];

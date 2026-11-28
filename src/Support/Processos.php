@@ -12,6 +12,8 @@ final class Processos
 
     public const int TESTES = 881703;
 
+    public const int CONFIG = 881704;
+
     /** @return array<int, string> */
     public static function titulos(): array
     {
@@ -20,6 +22,7 @@ final class Processos
             self::PAINEL => 'Painel',
             self::PEDIDOS => 'Pedidos',
             self::TESTES => 'Testes LibreSign',
+            self::CONFIG => 'Configurações',
         ];
     }
 }
