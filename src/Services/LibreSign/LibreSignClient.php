@@ -122,6 +122,34 @@ final class LibreSignClient
         return str_replace('://host.docker.internal', '://localhost', $base);
     }
 
+
+    /**
+     * LibreSign monta pasta/arquivo a partir de name — barras (ex.: 28/11/2026) geram 422.
+     */
+    private function nomeSeguroLibreSign(string $nome, bool $arquivo = false): string
+    {
+        $nome = trim(str_replace(["\0", "\r", "\n"], '', $nome));
+        // Separadores de path e caracteres que o Nextcloud/LibreSign rejeitam em pastas.
+        $nome = str_replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], '-', $nome);
+        $nome = preg_replace('/\s+/u', ' ', $nome) ?? $nome;
+        $nome = trim($nome, " .-_");
+        if ($nome === '') {
+            $nome = $arquivo ? 'documento.pdf' : 'documento';
+        }
+        if ($arquivo) {
+            $base = pathinfo($nome, PATHINFO_FILENAME);
+            $base = trim((string) $base);
+            if ($base === '') {
+                $base = 'documento';
+            }
+            // Espaços → underscore no arquivo (Nextcloud costuma normalizar assim).
+            $base = str_replace(' ', '_', $base);
+            $nome = $base.'.pdf';
+        }
+
+        return mb_substr($nome, 0, 180);
+    }
+
     /**
      * Tenta substituir o PDF de um pedido ainda não assinado (melhor esforço).
      */
@@ -131,6 +159,8 @@ final class LibreSignClient
         if ($uuid === '' || $pdfBinary === '') {
             return false;
         }
+
+        $fileName = $this->nomeSeguroLibreSign($fileName, true);
 
         $payload = [
             'uuid' => $uuid,
@@ -167,6 +197,10 @@ final class LibreSignClient
      */
     public function requestSignature(string $name, string $pdfBinary, array $signers, string $fileName = 'documento.pdf'): array
     {
+        // Título com data d/m/Y vira path inválido no Nextcloud ("Could not create path").
+        $name = $this->nomeSeguroLibreSign($name, false);
+        $fileName = $this->nomeSeguroLibreSign($fileName, true);
+
         $users = [];
         $signersPayload = [];
         foreach ($signers as $signer) {

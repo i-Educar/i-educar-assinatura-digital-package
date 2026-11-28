@@ -57,8 +57,8 @@ final class TesteAssinaturaController extends Controller
     private function montar(string $cenario): array
     {
         $titulo = $cenario === 'unica'
-            ? 'Teste assinatura única — '.now()->format('d/m/Y H:i')
-            : 'Teste múltiplas assinaturas — '.now()->format('d/m/Y H:i');
+            ? 'Teste assinatura única — '.now()->format('d-m-Y H:i')
+            : 'Teste múltiplas assinaturas — '.now()->format('d-m-Y H:i');
 
         $pdf = $this->pedidos->pdfDemo($titulo);
         $signers = [
