@@ -67,7 +67,8 @@ final class LibreSignClient
                     'OCS-APIRequest' => 'true',
                     'Accept' => 'application/json',
                 ])
-                ->timeout($this->timeout ?? 30)
+                ->timeout(8)
+                ->connectTimeout(3)
                 ->withOptions(['verify' => (bool) ($this->verifySsl ?? false)])
                 ->put($url, [
                     'key' => 'displayname',
@@ -81,7 +82,8 @@ final class LibreSignClient
                         'OCS-APIRequest' => 'true',
                         'Accept' => 'application/json',
                     ])
-                    ->timeout($this->timeout ?? 30)
+                    ->timeout(8)
+                    ->connectTimeout(3)
                     ->withOptions(['verify' => (bool) ($this->verifySsl ?? false)])
                     ->put($url, [
                         'key' => 'displayname',
@@ -191,9 +193,15 @@ final class LibreSignClient
             } elseif ($label === '' && $cargo !== '') {
                 $label = $cargo;
             }
-            // Validação LibreSign mostra displayName da conta NC — alinhamos antes do pedido.
+            // Validação LibreSign mostra displayName da conta NC — alinhamos antes do pedido
+            // (cache por conta+rótulo: evita N PUTs lentos/429 a cada assinatura de nota).
             if ($account !== '' && $label !== '') {
-                $this->definirNomeExibicaoConta($account, $label);
+                $cacheNome = 'assinatura.ls.displayname.'.md5(mb_strtolower($account).'|'.$label);
+                if (! Cache::has($cacheNome)) {
+                    if ($this->definirNomeExibicaoConta($account, $label)) {
+                        Cache::put($cacheNome, 1, now()->addHours(12));
+                    }
+                }
             }
             $row = ['identify' => $identify];
             if ($label !== '') {

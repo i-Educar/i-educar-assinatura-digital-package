@@ -72,13 +72,31 @@ final class PedidoAssinaturaService
      */
     public function assinarTodos(string $fileUuid, array $signers): array
     {
+        // Um único lookup do arquivo; reutiliza signers já assinados sem novo GET.
+        $file = $this->libreSign->findFileByUuid($fileUuid);
         $out = [];
         foreach ($signers as $signer) {
             $out[] = $this->assinarUm(
                 $fileUuid,
                 (string) ($signer['account'] ?? ''),
                 (string) ($signer['password'] ?? ''),
+                null,
+                is_array($file) ? $file : null,
             );
+            // Atualiza snapshot local: próximo signatário não refaz find se o anterior ok.
+            if (is_array($file) && ! empty($out[array_key_last($out)]['ok'])) {
+                $acc = mb_strtolower(trim((string) ($signer['account'] ?? '')));
+                foreach ($file['signers'] ?? [] as $i => $row) {
+                    if (! is_array($row)) {
+                        continue;
+                    }
+                    $lsAcc = $this->accountDoSignerLibreSign($row);
+                    if ($acc !== '' && mb_strtolower($lsAcc) === $acc) {
+                        $file['signers'][$i]['signed'] = true;
+                        break;
+                    }
+                }
+            }
         }
 
         return $out;
@@ -90,8 +108,13 @@ final class PedidoAssinaturaService
      *
      * @return array{account:string,ok:bool,mensagem:string}
      */
-    public function assinarUm(string $fileUuid, string $account, string $password, ?string $accountPreferida = null): array
-    {
+    public function assinarUm(
+        string $fileUuid,
+        string $account,
+        string $password,
+        ?string $accountPreferida = null,
+        ?array $filePrecarregado = null,
+    ): array {
         $account = trim($account);
         $password = trim($password);
         $preferida = trim((string) $accountPreferida);
@@ -101,7 +124,7 @@ final class PedidoAssinaturaService
 
         // 1) Integrador enxerga o pedido; 2) se faltar sign_uuid, busca como a conta do signatário
         //    (o LibreSign só devolve sign_uuid com "me": true para quem deve assinar).
-        $file = $this->libreSign->findFileByUuid($fileUuid);
+        $file = is_array($filePrecarregado) ? $filePrecarregado : $this->libreSign->findFileByUuid($fileUuid);
         $lsSigners = is_array($file['signers'] ?? null) ? $file['signers'] : [];
         $alvo = $file !== null
             ? $this->resolverSignerPendente($lsSigners, $preferida !== '' ? $preferida : $account)
