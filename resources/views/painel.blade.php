@@ -18,8 +18,10 @@
 @section('conteudo')
 @php
     $total = count($pedidos);
-    $assinados = collect($pedidos)->where('status', 'assinado')->count();
-    $pendentes = collect($pedidos)->whereIn('status', ['aguardando', 'parcial', ''])->count();
+    $totaisMeus = $meusAssinados['totais'] ?? ['todos' => 0, 'andamento' => 0, 'prontos' => 0];
+    $assinados = (int) ($totaisMeus['todos'] ?? 0);
+    $pendentes = (int) ($minhasPendencias ?? 0);
+    $destaques = is_array($meusAssinados['itens'] ?? null) ? $meusAssinados['itens'] : [];
 @endphp
 
 <div class="numeros">
@@ -35,12 +37,12 @@
     </article>
     <article style="--tom: var(--ok)">
         <div class="kpi-ico"><i class="fa fa-check-circle"></i></div>
-        <span>Assinados</span>
+        <span>Já assinei</span>
         <strong>{{ $assinados }}</strong>
     </article>
     <article style="--tom: var(--ambar)">
         <div class="kpi-ico"><i class="fa fa-clock-o"></i></div>
-        <span>Pendentes</span>
+        <span>Minhas pendências</span>
         <strong>{{ $pendentes }}</strong>
     </article>
 </div>
@@ -115,6 +117,26 @@
         <p class="texto-suave">Ver/Baixar fazem proxy sob demanda. Validação pública: {{ !empty($cfg['validacao_publica'] ?? true) ? 'ligada' : 'desligada' }}.</p>
     </div>
 </div>
+
+@if($destaques !== [])
+<div class="bloco">
+    <h2><i class="fa fa-check-square-o"></i> Já assinei</h2>
+    <ul class="atalhos" style="margin:0">
+        @foreach($destaques as $item)
+            <li>
+                <a href="{{ $item['url_ver'] ?? url('/assinatura-digital/assinados') }}">
+                    <i class="fa fa-file-text-o"></i>
+                    <span>
+                        {{ $item['titulo'] ?? 'Documento' }}
+                        <small>{{ $item['estado_rotulo'] ?? '' }}@if(!empty($item['progresso'])) · {{ $item['progresso'] }}@endif</small>
+                    </span>
+                </a>
+            </li>
+        @endforeach
+    </ul>
+    <p style="margin:10px 0 0"><a href="{{ url('/assinatura-digital/assinados') }}">Ver todos</a></p>
+</div>
+@endif
 
 <div class="bloco">
     <h2><i class="fa fa-history"></i> Últimos pedidos</h2>

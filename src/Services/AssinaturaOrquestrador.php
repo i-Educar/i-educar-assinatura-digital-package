@@ -210,6 +210,7 @@ final class AssinaturaOrquestrador
                 try {
                     $this->pedidos->sincronizarAposAssinatura($pedidoId, (string) $created['uuid']);
                     $pedido = $this->pedidos->obter($pedidoId);
+                    $visuais = $this->atualizarVisuaisAposSync($pedido, $visuais);
                 } catch (Throwable) {
                     //
                 }
@@ -220,6 +221,19 @@ final class AssinaturaOrquestrador
             } catch (Throwable $e) {
                 report($e);
             }
+        }
+
+        // Módulo de origem já confirmou a etapa (ex.: nota almox): garante slots na lista
+        // "Já assinei" mesmo se o LibreSign atrasar o flag signed.
+        if (! empty($meta['forcar_assinatura_imediata'])) {
+            $pedido = $this->pedidos->obter($pedidoId);
+            $metaAtual = is_array($pedido['meta'] ?? null) ? $pedido['meta'] : [];
+            $visuais = is_array($metaAtual['assinaturas_visuais'] ?? null) && $metaAtual['assinaturas_visuais'] !== []
+                ? $metaAtual['assinaturas_visuais']
+                : $visuais;
+            $visuais = $this->garantirVisuaisAssinadosLocalmente($visuais, Auth::id());
+            $this->persistirVisuais($pedidoId, $pedido, $visuais);
+            $pedido = $this->pedidos->obter($pedidoId);
         }
 
         return [
@@ -315,6 +329,8 @@ final class AssinaturaOrquestrador
                 }
             }
 
+            $userId = $resolvido['user_id'] ?? ($a['user_id'] ?? ($a['responsavel_id'] ?? null));
+            $login = $resolvido['login'] ?? ($a['login'] ?? null);
             $out[] = array_filter([
                 'account' => $account !== '' ? $account : null,
                 'email' => $email !== '' ? $email : null,
@@ -322,8 +338,8 @@ final class AssinaturaOrquestrador
                 'displayName' => $nome !== '' ? $nome : ($cargo !== '' ? $cargo : $account),
                 'cargo' => $cargo,
                 'nome' => $nome,
-                'login' => $resolvido['login'] ?? null,
-                'user_id' => $resolvido['user_id'] ?? null,
+                'login' => $login !== null && trim((string) $login) !== '' ? trim((string) $login) : null,
+                'user_id' => $userId !== null && (int) $userId > 0 ? (int) $userId : null,
                 'codigo_validacao' => trim((string) ($a['codigo_validacao'] ?? '')) ?: null,
                 'url_validacao' => trim((string) ($a['url_validacao'] ?? '')) ?: null,
             ], static fn ($v) => $v !== null && $v !== '');
@@ -555,34 +571,75 @@ final class AssinaturaOrquestrador
     }
 
     /**
+     * Após sincronizar com o LibreSign, preserva o que já foi gravado em meta
+     * (signed/status por signatário). Nunca sobrescreve com "Assinatura parcial"
+     * genérico — isso apagava o flag signed e sumia da lista "Já assinei".
+     *
      * @param  array<string,mixed>  $pedido
      * @param  list<array<string,mixed>>  $visuais
      * @return list<array<string,mixed>>
      */
     private function atualizarVisuaisAposSync(array $pedido, array $visuais): array
     {
+        $meta = is_array($pedido['meta'] ?? null) ? $pedido['meta'] : [];
+        $synced = is_array($meta['assinaturas_visuais'] ?? null) ? $meta['assinaturas_visuais'] : [];
+        if ($synced !== []) {
+            return array_values(array_filter($synced, 'is_array'));
+        }
+
         $status = (string) ($pedido['status'] ?? '');
+        if ($status !== 'assinado') {
+            return $visuais;
+        }
+
         $quando = $pedido['assinado_em'] ?? now()->toDateTimeString();
         foreach ($visuais as &$v) {
-            if ($status === 'assinado') {
-                $v['status'] = 'Assinado digitalmente';
-                $v['signed'] = true;
-                $v['quando'] = $quando;
-                $portal = trim((string) ($v['url_validacao_portal'] ?? ''));
-                if ($portal !== '') {
-                    $atual = trim((string) ($v['url_validacao'] ?? ''));
-                    if ($atual !== '' && str_contains($atual, '/apps/libresign/')) {
-                        $v['url_validacao_libresign'] = $atual;
-                    }
-                    $v['url_validacao'] = $portal;
+            if (! is_array($v)) {
+                continue;
+            }
+            $v['status'] = 'Assinado digitalmente';
+            $v['signed'] = true;
+            $v['quando'] = $quando;
+            $portal = trim((string) ($v['url_validacao_portal'] ?? ''));
+            if ($portal !== '') {
+                $atual = trim((string) ($v['url_validacao'] ?? ''));
+                if ($atual !== '' && str_contains($atual, '/apps/libresign/')) {
+                    $v['url_validacao_libresign'] = $atual;
                 }
-            } elseif ($status === 'parcial') {
-                $v['status'] = 'Assinatura parcial';
+                $v['url_validacao'] = $portal;
             }
         }
         unset($v);
         $this->persistirVisuais((int) $pedido['id'], $pedido, $visuais);
 
         return $visuais;
+    }
+
+    /**
+     * Com forçar imediato, todas as etapas acumuladas já foram confirmadas no módulo de origem.
+     *
+     * @param  list<array<string,mixed>>  $visuais
+     * @return list<array<string,mixed>>
+     */
+    private function garantirVisuaisAssinadosLocalmente(array $visuais, mixed $solicitanteId): array
+    {
+        unset($solicitanteId);
+        $quando = now()->toDateTimeString();
+        $out = [];
+        foreach ($visuais as $v) {
+            if (! is_array($v)) {
+                continue;
+            }
+            if (empty($v['signed'])) {
+                $v['signed'] = true;
+                $v['status'] = 'Assinado digitalmente';
+                if (trim((string) ($v['quando'] ?? '')) === '') {
+                    $v['quando'] = $quando;
+                }
+            }
+            $out[] = $v;
+        }
+
+        return $out;
     }
 }

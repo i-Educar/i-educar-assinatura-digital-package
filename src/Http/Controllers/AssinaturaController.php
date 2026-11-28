@@ -28,12 +28,27 @@ final class AssinaturaController extends Controller
     {
         $pedidos = $this->pedidos->listar(10);
         $cfg = ConfigAssinatura::estadoAtual();
+        $user = Auth::user();
+        $meusAssinados = $user !== null
+            ? $this->pendencias->listarAssinadosParaUsuario($user, 80, [
+                'filtro' => 'destaque',
+                'por_pagina' => 5,
+            ])
+            : [
+                'itens' => [],
+                'totais' => ['todos' => 0, 'andamento' => 0, 'prontos' => 0],
+            ];
+        $minhasPendencias = $user !== null
+            ? $this->pendencias->contarParaUsuario($user)
+            : 0;
 
         return view('assinatura::painel', [
             'pedidos' => $pedidos,
             'libresignOk' => $this->libreSign->configurado() && $this->libreSign->ping(),
             'baseUrl' => $this->libreSign->base(),
             'cfg' => $cfg,
+            'meusAssinados' => $meusAssinados,
+            'minhasPendencias' => $minhasPendencias,
         ]);
     }
 

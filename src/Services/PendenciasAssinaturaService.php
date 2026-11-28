@@ -210,15 +210,33 @@ final class PendenciasAssinaturaService
             $assinaturasColetadas = [];
             $ultimaAssinaturaEm = null;
 
+            $statusPedido = (string) ($pedido['status'] ?? '');
+            $souSolicitante = $ids['user_id'] !== null
+                && (int) ($pedido['solicitante_id'] ?? 0) === (int) $ids['user_id'];
+            $meta = is_array($pedido['meta'] ?? null)
+                ? $pedido['meta']
+                : (json_decode((string) ($pedido['meta'] ?? ''), true) ?: []);
+            $meta = is_array($meta) ? $meta : [];
+            $forcarImediato = ! empty($meta['forcar_assinatura_imediata']);
+
             foreach ($slots as $slot) {
                 if (! is_array($slot)) {
                     continue;
                 }
                 $total++;
-                $ja = $this->slotJaAssinado($slot);
+                $pertence = $this->slotPertenceAoUsuario($slot, $ids);
+                // Pedido concluído / etapa forçada no módulo: conta como assinado mesmo com
+                // visual genérico ("Assinatura parcial") sem flag signed.
+                $ja = $this->slotJaAssinado($slot)
+                    || ($pertence && $statusPedido === 'assinado')
+                    || ($pertence && $this->slotIndicaAssinaturaLocal($slot))
+                    || ($pertence && $forcarImediato);
                 $cargo = trim((string) ($slot['cargo'] ?? ''));
                 $nome = trim((string) ($slot['nome'] ?? $slot['displayName'] ?? ''));
                 $quandoSlot = trim((string) ($slot['quando'] ?? ''));
+                if ($quandoSlot === '' && $ja) {
+                    $quandoSlot = trim((string) ($pedido['assinado_em'] ?? $pedido['updated_at'] ?? ''));
+                }
                 $quandoHumano = $this->humanizarDataHora($quandoSlot !== '' ? $quandoSlot : null);
 
                 if ($ja) {
@@ -229,7 +247,7 @@ final class PendenciasAssinaturaService
                         'quando' => $quandoSlot !== '' ? $quandoSlot : null,
                         'quando_humano' => $quandoHumano['absoluto'] ?? null,
                         'quando_relativo' => $quandoHumano['relativo'] ?? null,
-                        'minha' => $this->slotPertenceAoUsuario($slot, $ids),
+                        'minha' => $pertence,
                     ];
                     if ($quandoSlot !== '') {
                         try {
@@ -243,27 +261,55 @@ final class PendenciasAssinaturaService
                     }
                 }
 
-                if ($this->slotPertenceAoUsuario($slot, $ids)) {
+                if ($pertence) {
                     if ($ja) {
                         $meuSlot = $slot;
+                        if (trim((string) ($meuSlot['quando'] ?? '')) === '' && $quandoSlot !== '') {
+                            $meuSlot['quando'] = $quandoSlot;
+                        }
                     }
                 } elseif (! $ja) {
                     $pendentesOutros[] = $cargo !== '' ? $cargo : ($nome !== '' ? $nome : 'Signatário');
                 }
             }
+
+            // Nota almox / assinatura imediata: solicitante sem user_id no slot visual.
+            if ($meuSlot === null && $souSolicitante && $total > 0
+                && ($forcarImediato || in_array($statusPedido, ['assinado', 'parcial'], true))) {
+                foreach ($slots as $slot) {
+                    if (! is_array($slot)) {
+                        continue;
+                    }
+                    if ($this->slotJaAssinado($slot) || $forcarImediato || $statusPedido === 'assinado'
+                        || $this->slotIndicaAssinaturaLocal($slot)) {
+                        $meuSlot = $slot;
+                        if (trim((string) ($meuSlot['quando'] ?? '')) === '') {
+                            $meuSlot['quando'] = (string) ($pedido['assinado_em'] ?? $pedido['updated_at'] ?? now()->toDateTimeString());
+                        }
+                        $assinados = max($assinados, 1);
+                        break;
+                    }
+                }
+                if ($meuSlot === null && ($statusPedido === 'assinado' || $forcarImediato)) {
+                    $meuSlot = is_array($slots[0] ?? null) ? $slots[0] : [
+                        'cargo' => 'Signatário',
+                        'quando' => $pedido['assinado_em'] ?? $pedido['updated_at'] ?? null,
+                    ];
+                    $assinados = max($assinados, 1);
+                }
+            }
+
             if ($meuSlot === null || $total === 0) {
                 continue;
             }
 
             // Status do pedido LibreSign (pode ser 1 etapa).
             $completoLs = $assinados >= $total
-                || (string) ($pedido['status'] ?? '') === 'assinado';
+                || $statusPedido === 'assinado'
+                || ($forcarImediato && $assinados >= $total);
 
             // Fluxo multi-etapa do documento de origem (ex.: nota almox Separação→Conferência).
-            $meta = is_array($pedido['meta'] ?? null)
-                ? $pedido['meta']
-                : (json_decode((string) ($pedido['meta'] ?? ''), true) ?: []);
-            $fluxo = $this->progressoFluxoDocumentoOrigem(is_array($meta) ? $meta : []);
+            $fluxo = $this->progressoFluxoDocumentoOrigem($meta);
             $completo = $completoLs;
             if ($fluxo !== null) {
                 $assinados = (int) $fluxo['concluidas'];
@@ -1174,15 +1220,33 @@ final class PendenciasAssinaturaService
     /** @param  array<string,mixed>  $slot */
     private function slotJaAssinado(array $slot): bool
     {
+        if (! empty($slot['signed'])) {
+            return true;
+        }
+
         $status = mb_strtolower(trim((string) ($slot['status'] ?? '')));
-        if ($status === '') {
+        if ($status === '' || str_contains($status, 'aguardando')) {
             return false;
+        }
+        // "Assinatura parcial" sozinho não prova que ESTE slot assinou.
+        if ($status === 'assinatura parcial' || $status === 'parcial') {
+            return $this->slotIndicaAssinaturaLocal($slot);
         }
 
         return str_contains($status, 'assinado')
             || str_contains($status, 'assinada')
             || $status === 'registrada'
-            || ! empty($slot['signed']);
+            || str_contains($status, 'digitalmente');
+    }
+
+    /** Slot com data local de assinatura (não usar código — ele existe antes de assinar). */
+    private function slotIndicaAssinaturaLocal(array $slot): bool
+    {
+        if (! empty($slot['signed'])) {
+            return true;
+        }
+
+        return trim((string) ($slot['quando'] ?? '')) !== '';
     }
 
     /**

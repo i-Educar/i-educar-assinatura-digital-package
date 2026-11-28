@@ -22,8 +22,11 @@
         .app { display: flex; min-height: 100vh; }
         .lateral { width: 248px; flex: none; background: linear-gradient(180deg, color-mix(in srgb, var(--cor) 35%, #15222b), var(--nav)); color: var(--nav-texto); }
         .marca { display: flex; align-items: center; justify-content: center; color: #fff; text-decoration: none; padding: 14px; border-bottom: 1px solid rgba(255,255,255,.08); }
-        .icone { width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
+        /* Escopo em .marca — não pode vazar para .botao.icone do cabeçalho */
+        .marca .icone { width: 40px; height: 40px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center;
             background: linear-gradient(145deg, var(--destaque), var(--cor)); color: #fff; box-shadow: 0 8px 18px color-mix(in srgb, var(--cor) 35%, transparent); }
+        .botao.icone { width: 40px; min-width: 40px; height: 40px; min-height: 40px; padding: 0; gap: 0; justify-content: center; flex: none; box-shadow: none; }
+        .botao.icone i { font-size: 1.05rem; line-height: 1; margin: 0; }
         .modulo { padding: 8px 10px; }
         .modulo-nome { margin: 0; padding: 8px; color: #8aa0ad; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; }
         .modulo a { display: flex; align-items: center; gap: 10px; color: var(--nav-texto); text-decoration: none; border-radius: 10px; padding: 8px 10px; }

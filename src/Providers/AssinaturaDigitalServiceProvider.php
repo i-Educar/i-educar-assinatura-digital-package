@@ -60,14 +60,16 @@ class AssinaturaDigitalServiceProvider extends ServiceProvider
             \iEducar\Packages\BuritiLagunaAmbiente\Support\BuritiUi::registrar();
         }
 
+        // Comandos sempre registrados — o diagnóstico Laguna (HTTP) consulta Artisan::all().
+        $this->commands([
+            AssinaturaTesteCommand::class,
+            AssinaturaRepararPendentesCommand::class,
+        ]);
+
         if ($this->app->runningInConsole()) {
             if (\App\Support\Tenancy\PackageTenant::allows(self::PACKAGE)) {
                 $this->loadMigrationsFrom($root.'/database/migrations');
             }
-            $this->commands([
-                AssinaturaTesteCommand::class,
-                AssinaturaRepararPendentesCommand::class,
-            ]);
         }
 
         $this->app['router']->aliasMiddleware('assinatura.admin', EnsureAssinaturaAdministrador::class);
