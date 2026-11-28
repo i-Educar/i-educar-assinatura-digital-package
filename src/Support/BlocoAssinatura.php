@@ -31,24 +31,43 @@ final class BlocoAssinatura
         $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $cor = (string) ($opcoes['cor'] ?? '#0a7a8a');
         $titulo = (string) ($opcoes['titulo'] ?? 'Assinaturas');
+        $n = count($assinaturas);
+        // Dompdf: tabela em 1 linha (até 4) cabe melhor em A4 do que grid 2×2 com muito padding.
+        $cols = (int) ($opcoes['colunas'] ?? 0);
+        if ($cols < 1) {
+            $cols = min(4, max(1, $n));
+        }
+        $cols = max(1, min(4, $cols));
+        $pct = rtrim(rtrim(number_format(100 / $cols, 2, '.', ''), '0'), '.').'%';
 
-        $blocos = '';
-        foreach ($assinaturas as $a) {
-            $blocos .= self::umHtml($a, $cor);
+        $linhas = '';
+        foreach (array_chunk($assinaturas, $cols) as $chunk) {
+            $celulas = '';
+            foreach ($chunk as $a) {
+                $celulas .= '<td class="assina ls-assina" style="width:'.$pct.';vertical-align:top;padding:10px 6px 0;text-align:center;word-break:break-word;">'
+                    .self::umHtml($a, $cor, true)
+                    .'</td>';
+            }
+            for ($i = count($chunk); $i < $cols; $i++) {
+                $celulas .= '<td style="width:'.$pct.';border:0;padding:0;"></td>';
+            }
+            $linhas .= '<tr>'.$celulas.'</tr>';
         }
 
-        return '<section class="assinaturas ls-assinaturas">'
-            .'<h2 style="color:'.$e($cor).';font-size:.9rem;margin:0 0 6px;text-transform:uppercase;letter-spacing:.04em;">'
+        return '<section class="assinaturas ls-assinaturas" style="margin:14px 0 6px;">'
+            .'<h2 style="color:'.$e($cor).';font-size:.82rem;margin:0 0 4px;text-transform:uppercase;letter-spacing:.04em;">'
             .$e($titulo)
             .'</h2>'
-            .'<div class="grade-assina ls-grade-assina">'.$blocos.'</div>'
+            .'<table class="grade-assina ls-grade-assina" style="width:100%;border-collapse:collapse;table-layout:fixed;">'
+            .$linhas
+            .'</table>'
             .'</section>';
     }
 
     /**
      * @param  array<string,mixed>  $a
      */
-    public static function umHtml(array $a, string $cor = '#0a7a8a'): string
+    public static function umHtml(array $a, string $cor = '#0a7a8a', bool $somenteConteudo = false): string
     {
         $e = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
@@ -62,26 +81,32 @@ final class BlocoAssinatura
 
         $autenticidade = '';
         if ($codigo !== '' || $url !== '') {
-            $label = 'Conferir autenticidade';
+            $label = 'Conferir';
             $detalhe = $codigo !== '' ? ' · '.$codigo : '';
             if ($url !== '') {
-                $autenticidade = '<a class="ls-auth" href="'.$e($url).'" style="display:inline-block;margin-top:6px;font-size:.72rem;color:'.$e($cor).';text-decoration:none;border-bottom:1px dotted '.$e($cor).';">'
+                $autenticidade = '<a class="ls-auth" href="'.$e($url).'" style="display:inline-block;margin-top:4px;font-size:.65rem;color:'.$e($cor).';text-decoration:none;border-bottom:1px dotted '.$e($cor).';word-break:break-all;">'
                     .$e($label.$detalhe)
                     .'</a>';
             } else {
-                $autenticidade = '<span class="ls-auth" style="display:inline-block;margin-top:6px;font-size:.72rem;color:'.$e($cor).';">'
+                $autenticidade = '<span class="ls-auth" style="display:inline-block;margin-top:4px;font-size:.65rem;color:'.$e($cor).';word-break:break-all;">'
                     .$e($label.$detalhe)
                     .'</span>';
             }
         }
 
-        return '<div class="assina ls-assina" style="text-align:center;padding-top:36px;">'
-            .'<div class="linha-assina" style="border-top:1px solid #1a242b;margin:0 18px 8px;height:0;"></div>'
-            .'<strong style="display:block;font-size:.88rem;color:#1a242b;">'.$e($nome !== '' ? $nome : '________________').'</strong>'
-            .($cargo !== '' ? '<span style="display:block;color:#5b6b76;font-size:.78rem;line-height:1.35;">'.$e($cargo).'</span>' : '')
-            .($quando !== '' ? '<small style="display:block;color:#5b6b76;font-size:.72rem;">'.$e($quando).'</small>' : '')
-            .($status !== '' ? '<small style="display:block;color:#5b6b76;font-size:.7rem;">'.$e($status).'</small>' : '')
-            .$autenticidade
+        $inner = '<div class="linha-assina" style="border-top:1px solid #1a242b;margin:0 10px 6px;height:0;"></div>'
+            .'<strong style="display:block;font-size:.78rem;line-height:1.25;color:#1a242b;word-break:break-word;">'.$e($nome !== '' ? $nome : '________________').'</strong>'
+            .($cargo !== '' ? '<span style="display:block;color:#5b6b76;font-size:.7rem;line-height:1.25;word-break:break-word;">'.$e($cargo).'</span>' : '')
+            .($quando !== '' ? '<small style="display:block;color:#5b6b76;font-size:.65rem;line-height:1.2;">'.$e($quando).'</small>' : '')
+            .($status !== '' ? '<small style="display:block;color:#5b6b76;font-size:.62rem;line-height:1.2;">'.$e($status).'</small>' : '')
+            .$autenticidade;
+
+        if ($somenteConteudo) {
+            return $inner;
+        }
+
+        return '<div class="assina ls-assina" style="text-align:center;padding-top:22px;word-break:break-word;">'
+            .$inner
             .'</div>';
     }
 
