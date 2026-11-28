@@ -10,8 +10,8 @@ use RuntimeException;
 /**
  * Cliente OCS da API LibreSign (Nextcloud).
  *
- * Compatível com LibreSign 10.x (`users` + `identify`) e com o formato
- * documentado mais recente (`signers` + `identifyMethods`) como fallback.
+ * Preferência: formato atual (`signers` + `identifyMethods`, cloud.libresign.coop).
+ * Fallback legado: LibreSign 10.x (`users` + `identify`).
  *
  * @see https://docs.libresign.coop/main/developer_manual/api/guide-api.html
  */
@@ -168,15 +168,11 @@ final class LibreSignClient
     public function requestSignature(string $name, string $pdfBinary, array $signers, string $fileName = 'documento.pdf'): array
     {
         $users = [];
+        $signersPayload = [];
         foreach ($signers as $signer) {
-            $identify = [];
             $account = trim((string) ($signer['account'] ?? ''));
-            if ($account !== '') {
-                $identify['account'] = $account;
-            } elseif (! empty($signer['email'])) {
-                $identify['email'] = (string) $signer['email'];
-            }
-            if ($identify === []) {
+            $email = trim((string) ($signer['email'] ?? ''));
+            if ($account === '' && $email === '') {
                 throw new RuntimeException('Cada signatário precisa de account ou email.');
             }
             // Preferir displayName/description já montados (ex.: "matricula — Almoxarifado escolar").
@@ -203,26 +199,63 @@ final class LibreSignClient
                     }
                 }
             }
-            $row = ['identify' => $identify];
+
+            // Formato legado (LibreSign 10 / self-host antigo).
+            $identify = $account !== ''
+                ? ['account' => $account]
+                : ['email' => $email];
+            $legacy = ['identify' => $identify];
             if ($label !== '') {
-                $row['description'] = $label;
-                $row['displayName'] = $label;
+                $legacy['description'] = $label;
+                $legacy['displayName'] = $label;
             }
-            $users[] = $row;
+            $users[] = $legacy;
+
+            // Formato atual (cloud.libresign.coop e docs recentes).
+            $methods = $account !== ''
+                ? [['method' => 'account', 'value' => $account]]
+                : [['method' => 'email', 'value' => $email]];
+            $modern = ['identifyMethods' => $methods];
+            if ($label !== '') {
+                $modern['description'] = $label;
+                $modern['displayName'] = $label;
+            }
+            $signersPayload[] = $modern;
+        }
+
+        if ($signersPayload === []) {
+            throw new RuntimeException('Informe ao menos um signatário (account ou email).');
         }
 
         // Rodapé mínimo (sem QR) antes de criar o pedido — evita carimbo sobre o documento.
         $this->garantirRodapeSimples();
 
-        // LibreSign 10.x espera `users` + `identify`. Tentamos esse formato primeiro.
-        $data = $this->post('/request-signature', [
-            'name' => $name,
-            'file' => [
-                'name' => $fileName,
-                'base64' => base64_encode($pdfBinary),
-            ],
-            'users' => $users,
-        ]);
+        $file = [
+            'name' => $fileName,
+            'base64' => base64_encode($pdfBinary),
+        ];
+
+        // Cloud/API nova exige `signers`+identifyMethods; `users` sozinho → "Empty signers list".
+        try {
+            $data = $this->post('/request-signature', [
+                'name' => $name,
+                'file' => $file,
+                'signers' => $signersPayload,
+            ]);
+        } catch (RuntimeException $e) {
+            $msg = $e->getMessage();
+            $precisaLegado = str_contains($msg, 'Empty signers')
+                || str_contains($msg, 'identify')
+                || str_contains($msg, 'users');
+            if (! $precisaLegado) {
+                throw $e;
+            }
+            $data = $this->post('/request-signature', [
+                'name' => $name,
+                'file' => $file,
+                'users' => $users,
+            ]);
+        }
 
         $inner = is_array($data['data'] ?? null) ? $data['data'] : $data;
 
